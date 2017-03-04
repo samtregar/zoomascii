@@ -2,8 +2,6 @@
 
 /* could just inline this table, but I'm lazy, maybe when it's release-ready */
 unsigned char swapcase_table[256];
-unsigned int swapcase_init_done = 0;
-
 void _do_swapcase_init(void) {
   unsigned int c = 0;
   do {
@@ -15,8 +13,6 @@ void _do_swapcase_init(void) {
       swapcase_table[c] = c;
     }
   } while (c++ != 255);
-
-  swapcase_init_done = 1;
 }
 
 static PyObject*
@@ -26,10 +22,6 @@ swapcase(PyObject* self, PyObject* args) {
     char *output;
     int len, i, front_len;
     PyObject *ret;
-
-    // build the lookup table first time through
-    if (!swapcase_init_done)
-      _do_swapcase_init();
 
     // get the input string without copying it
     if (!PyArg_ParseTuple(args, "S", &input_obj))
@@ -72,4 +64,6 @@ PyMODINIT_FUNC
 initzoomascii(void)
 {
      (void) Py_InitModule("zoomascii", ZoomMethods);
+
+     _do_swapcase_init();
 }
