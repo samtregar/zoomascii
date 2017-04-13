@@ -3,7 +3,9 @@ from setuptools import find_packages, setup, Extension
 
 ext = Extension('zoomascii',
                 sources=['src/zoomascii.c'],
-                depends=['src/zoomascii.h'])
+                depends=['src/zoomascii.h'],
+#                extra_compile_args=["-O3"]
+                )
 
 setup(name         = "zoomascii",
       version      = "0.1",

@@ -1,4 +1,13 @@
 #include <Python.h>
+#include "zoomascii.h"
+
+#ifndef INLINE
+# if __GNUC__ && !__GNUC_STDC_INLINE__
+#  define INLINE extern inline
+# else
+#  define INLINE inline
+# endif
+#endif
 
 /* could just inline this table, but I'm lazy, maybe when it's release-ready */
 unsigned char swapcase_table[256];
@@ -20,7 +29,7 @@ swapcase(PyObject* self, PyObject* args) {
     PyObject *input_obj;
     const unsigned char* input;
     char *output;
-    int len, i, front_len;
+    Py_ssize_t len, i, front_len;
     PyObject *ret;
 
     // get the input string without copying it
@@ -54,16 +63,145 @@ swapcase(PyObject* self, PyObject* args) {
     return ret;
 }
 
-static PyMethodDef ZoomMethods[] =
-{
-     {"swapcase", swapcase, METH_VARARGS, "ASCII swap case, fast."},
-     {NULL, NULL, 0, NULL}
-};
 
-PyMODINIT_FUNC
-initzoomascii(void)
-{
-     (void) Py_InitModule("zoomascii", ZoomMethods);
+INLINE void encode_qp(char c, char *output, int *j_in) {
+  char c2;
+  int j = *j_in;
+  output[j] = '=';
+  c2 = (c >> 4) & 0xf;
+  output[j+1] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
+  c2 = c & 0xf;
+  output[j+2] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
+  *j_in = j + 3;
+}
 
-     _do_swapcase_init();
+// used to round up the output buffer sizes to 4k + 1 so we always
+// have room to work without frequent reallocs and checks
+int roundUp4k(int numToRound) {
+  int multiple = 4 * 1024;
+  
+  int remainder = numToRound % multiple;
+  if (remainder == 0)
+    return numToRound;
+  
+  return numToRound + multiple - remainder;
+}
+
+#define CR 13
+#define LF 10
+#define MAX_LINE_LENGTH 72
+
+static PyObject*
+b2a_qp(PyObject* self, PyObject* args) {
+  Py_buffer input_buf;
+  PyObject *ret;
+  char *input, *output, c;
+  int input_len, i, j, output_len, line_len;
+
+  // get the input string without copying it
+  if (!PyArg_ParseTuple(args, "s*", &input_buf))
+    return NULL;
+  input = input_buf.buf;
+  input_len = input_buf.len;
+  
+  assert(input_len >= 0);
+  if (input_len > PY_SSIZE_T_MAX / 2) {
+    PyBuffer_Release(&input_buf);
+    return PyErr_NoMemory();
+  }
+  
+  // get a string to work on, in a format we can return directly
+  // without more copying - start with a string twice as large, could
+  // be more careful here and use less memory
+  output_len = input_len*2;
+  output_len = roundUp4k(output_len);
+  ret = PyString_FromStringAndSize(NULL, output_len);
+  if (!ret) {
+    PyBuffer_Release(&input_buf);
+    return NULL;
+  }
+
+  output = PyString_AS_STRING(ret);
+  if (!output) {
+    PyBuffer_Release(&input_buf);
+    Py_DECREF(ret);
+    return NULL;
+  }
+
+  j = 0;
+  line_len = 0;
+  for (i = 0; i < input_len; i++) {
+    // check that output doesn't need to be resized
+    if (j >= output_len) {
+      // get another 4k and realloc the string
+      output_len = roundUp4k(output_len+1);
+      _PyString_Resize(&ret, output_len);
+      output = PyString_AS_STRING(ret);
+    }
+
+    c = input[i];
+    if (c == '.' && line_len == 0) {
+      // not actually part of QP encoding but SMTP needs this - encode
+      // leading . on line
+      encode_qp(c, output, &j);
+      line_len+=3;
+    } else if ((c >= 33 && c <= 60) || (c >= 62 && c <= 126)) {
+      // safe chars not encoded (maybe notice runs and memcpy at once?)
+      output[j++] = c;
+      line_len++;
+    } else if (c == ' ' || c == '\t') {
+      // space or tab is ok unless the next sequence is a CRLF
+      if (i < input_len+2 && input[i+1] == CR && input[i+2] == LF) {
+        encode_qp(c, output, &j);
+        line_len+=3;
+      } else {
+        output[j++] = c;
+        line_len++;
+      }
+    } else if (c == CR && i < input_len+1 && input[i+1] == LF) {
+      // CRLF can go as-is
+      output[j] = CR;
+      output[j+1] = LF;
+      j += 2;
+      i++;
+      line_len = 0;
+    } else {
+      encode_qp(c, output, &j);
+      line_len+=3;      
+    }
+
+    if (line_len >= MAX_LINE_LENGTH) {
+      output[j] = '=';
+      output[j+1] = CR;
+      output[j+2] = LF;
+      j += 3;
+      line_len = 0;
+    }
+     
+  }
+
+  // check that output doesn't need to be resized before NULL
+  if (j >= output_len) {
+    // get another 4k and realloc the string
+    output_len = roundUp4k(output_len+1);
+    _PyString_Resize(&ret, output_len);
+    output = PyString_AS_STRING(ret);
+  }
+  
+  // NULL terminate
+  output[j] = 0;
+    
+  // resize python string to return - should confirm that this isn't
+  // going to actually realloc when shrinking.  If it is then should
+  // find a way to just adjust size and null terminate.
+  _PyString_Resize(&ret, j);
+  output = PyString_AS_STRING(ret);
+                  
+  PyBuffer_Release(&input_buf);
+  return ret;
+}
+
+PyMODINIT_FUNC initzoomascii(void) {
+  (void) Py_InitModule("zoomascii", ZoomMethods);
+  _do_swapcase_init();
 }
