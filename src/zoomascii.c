@@ -95,8 +95,8 @@ static PyObject*
 b2a_qp(PyObject* self, PyObject* args) {
   Py_buffer input_buf;
   PyObject *ret;
-  char *input, *output, c;
-  int input_len, i, j, output_len, line_len;
+  char *input, *output, c, cx;
+  int input_len, i, j, x, output_len, line_len;
 
   // get the input string without copying it
   if (!PyArg_ParseTuple(args, "s*", &input_buf))
@@ -146,9 +146,18 @@ b2a_qp(PyObject* self, PyObject* args) {
       encode_qp(c, output, &j);
       line_len+=3;
     } else if ((c >= 33 && c <= 60) || (c >= 62 && c <= 126)) {
-      // safe chars not encoded (maybe notice runs and memcpy at once?)
-      output[j++] = c;
-      line_len++;
+      // see if we can memcpy a bunch of the string all at once -
+      // faster than doing it char by char
+      for(x = 1; x < MAX_LINE_LENGTH-line_len; x++) {
+        cx = input[i+x];
+        if (cx < 33 || cx > 126 || cx == 61)
+          break;
+      }
+      memcpy(output+j, input+i, x);
+      line_len += x;
+      i += x-1;
+      j += x;
+      
     } else if (c == ' ' || c == '\t') {
       // space or tab is ok unless the next sequence is a CRLF
       if (i < input_len+2 && input[i+1] == CR && input[i+2] == LF) {
