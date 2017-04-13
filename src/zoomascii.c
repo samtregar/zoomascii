@@ -199,11 +199,10 @@ b2a_qp(PyObject* self, PyObject* args) {
   // NULL terminate
   output[j] = 0;
     
-  // resize python string to return - should confirm that this isn't
-  // going to actually realloc when shrinking.  If it is then should
-  // find a way to just adjust size and null terminate.
-  _PyString_Resize(&ret, j);
-  output = PyString_AS_STRING(ret);
+  // shorten the string by assigning to size directly - seems to work
+  // fine, may not be 100% legal, need to check for memory leaks with
+  // this method.
+  Py_SIZE(ret) = j;
                   
   PyBuffer_Release(&input_buf);
   return ret;
