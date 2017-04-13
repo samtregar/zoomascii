@@ -87,6 +87,16 @@ int roundUp4k(int numToRound) {
   return numToRound + multiple - remainder;
 }
 
+INLINE void check_and_resize_output(PyObject *ret, char **output, int *output_len, int *j) {
+    // check that output doesn't need to be resized
+    if (*j >= *output_len) {
+      // get another 4k and realloc the string
+      *output_len = roundUp4k(*output_len+1);
+      _PyString_Resize(&ret, *output_len);
+      *output = PyString_AS_STRING(ret);
+    }
+}
+
 #define CR 13
 #define LF 10
 #define MAX_LINE_LENGTH 72
@@ -131,14 +141,8 @@ b2a_qp(PyObject* self, PyObject* args) {
   j = 0;
   line_len = 0;
   for (i = 0; i < input_len; i++) {
-    // check that output doesn't need to be resized
-    if (j >= output_len) {
-      // get another 4k and realloc the string
-      output_len = roundUp4k(output_len+1);
-      _PyString_Resize(&ret, output_len);
-      output = PyString_AS_STRING(ret);
-    }
-
+    check_and_resize_output(ret, &output, &output_len, &j);
+    
     c = input[i];
     if (c == '.' && line_len == 0) {
       // not actually part of QP encoding but SMTP needs this - encode
@@ -153,10 +157,10 @@ b2a_qp(PyObject* self, PyObject* args) {
         if (cx < 33 || cx > 126 || cx == 61)
           break;
       }
-      memcpy(output+j, input+i, x);
+      j += x;
+      memcpy(output+j-x, input+i, x);
       line_len += x;
       i += x-1;
-      j += x;
       
     } else if (c == ' ' || c == '\t') {
       // space or tab is ok unless the next sequence is a CRLF
@@ -190,12 +194,7 @@ b2a_qp(PyObject* self, PyObject* args) {
   }
 
   // check that output doesn't need to be resized before NULL
-  if (j >= output_len) {
-    // get another 4k and realloc the string
-    output_len = roundUp4k(output_len+1);
-    _PyString_Resize(&ret, output_len);
-    output = PyString_AS_STRING(ret);
-  }
+  check_and_resize_output(ret, &output, &output_len, &j);
   
   // NULL terminate
   output[j] = 0;
