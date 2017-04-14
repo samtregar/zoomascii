@@ -87,16 +87,6 @@ int roundUp4k(int numToRound) {
   return numToRound + multiple - remainder;
 }
 
-INLINE void check_and_resize_output(PyObject *ret, char **output, int *output_len, int *j) {
-    // check that output doesn't need to be resized
-    if (*j >= *output_len) {
-      // get another 4k and realloc the string
-      *output_len = roundUp4k(*output_len+1);
-      _PyString_Resize(&ret, *output_len);
-      *output = PyString_AS_STRING(ret);
-    }
-}
-
 #define CR 13
 #define LF 10
 #define MAX_LINE_LENGTH 72
@@ -141,7 +131,18 @@ b2a_qp(PyObject* self, PyObject* args) {
   j = 0;
   line_len = 0;
   for (i = 0; i < input_len; i++) {
-    check_and_resize_output(ret, &output, &output_len, &j);
+    // check that output doesn't need to be resized - we need at least
+    // three characters so we can write out an escape
+    if (j+3 > output_len) {
+      // get another 4k and realloc the string
+      output_len = roundUp4k(j+3);
+      if (_PyString_Resize(&ret, output_len) == -1) {
+        PyBuffer_Release(&input_buf);
+        Py_DECREF(ret); 
+        return NULL;
+      }
+      output = PyString_AS_STRING(ret);
+    }
     
     c = input[i];
     if (c == '.' && line_len == 0) {
@@ -149,10 +150,15 @@ b2a_qp(PyObject* self, PyObject* args) {
       // leading . on line
       encode_qp(c, output, &j);
       line_len+=3;
-    } else if ((c >= 33 && c <= 60) || (c >= 62 && c <= 126)) {
+    } else if (c >= 33 && c <= 126 && c != 61) {
       // see if we can memcpy a bunch of the string all at once -
       // faster than doing it char by char
       for(x = 1; x < MAX_LINE_LENGTH-line_len; x++) {
+        if(i+x+1 > input_len)
+          break;
+        if(j+x+1 > output_len)
+          break;
+
         cx = input[i+x];
         if (cx < 33 || cx > 126 || cx == 61)
           break;
@@ -193,12 +199,6 @@ b2a_qp(PyObject* self, PyObject* args) {
      
   }
 
-  // check that output doesn't need to be resized before NULL
-  check_and_resize_output(ret, &output, &output_len, &j);
-  
-  // NULL terminate
-  output[j] = 0;
-    
   // shorten the string by assigning to size directly - seems to work
   // fine, may not be 100% legal, need to check for memory leaks with
   // this method.
