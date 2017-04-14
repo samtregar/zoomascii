@@ -5,8 +5,7 @@ with added zoom.  These functions only work on ASCII strings and will
 trade memory for speed (within reason).  Currently targeting Python
 2.7.x, but patches welcome for Python 3.x.
 
-Currently Implemented
-=====================
+## Currently Implemented
 
 b2a_qp - Hot code for email sending apps that use QP encoding, and the
 reason I started this library.  Around 3x faster than binascii.b2a_qp.
@@ -15,8 +14,7 @@ swapcase - over 10x faster than Python's builtin swapcase() for ASCII
 strings.  (I don't expect this is actually useful, just did it as a
 proof-of-concept.)
 
-Example Code
-============
+## Example Code
 
         import zoomascii
 
@@ -26,8 +24,7 @@ Example Code
         # swapcase so fast
         text = zoomascii.swapcase(text)
 
-Implementation Notes
-====================
+## Implementation Notes
 
 The implementation of b2a_qp follows the specification for
 Quoted-Printable encoding in RFC 2045
