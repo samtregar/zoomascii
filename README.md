@@ -14,6 +14,18 @@ swapcase - over 10x faster than Python's builtin swapcase() for ASCII
 strings.  (I don't expect this is actually useful, just did it as a
 proof-of-concept.)
 
+## Install
+
+Get it with pip:
+
+        $ pip install zoomascii
+
+Or clone it from github and install manually:
+
+        $ git clone https://github.com/samtregar/zoomascii.git
+        $ cd zoomascii
+        $ sudo python setup.py install
+
 ## Example Code
 
         import zoomascii
