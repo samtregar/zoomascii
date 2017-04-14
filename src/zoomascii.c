@@ -154,9 +154,7 @@ b2a_qp(PyObject* self, PyObject* args) {
       // see if we can memcpy a bunch of the string all at once -
       // faster than doing it char by char
       for(x = 1; x < MAX_LINE_LENGTH-line_len; x++) {
-        if(i+x+1 > input_len)
-          break;
-        if(j+x+1 > output_len)
+        if (i+x+1 > input_len || j+x+1 > output_len)
           break;
 
         cx = input[i+x];
@@ -177,7 +175,7 @@ b2a_qp(PyObject* self, PyObject* args) {
         output[j++] = c;
         line_len++;
       }
-    } else if (c == CR && i < input_len+1 && input[i+1] == LF) {
+    } else if (c == CR && i+1 < input_len && input[i+1] == LF) {
       // CRLF can go as-is
       output[j] = CR;
       output[j+1] = LF;
@@ -185,10 +183,12 @@ b2a_qp(PyObject* self, PyObject* args) {
       i++;
       line_len = 0;
     } else {
+      // encode all other chars
       encode_qp(c, output, &j);
       line_len+=3;      
     }
 
+    // soft line break at max
     if (line_len >= MAX_LINE_LENGTH) {
       output[j] = '=';
       output[j+1] = CR;
