@@ -18,13 +18,13 @@ proof-of-concept.)
 Example Code
 ============
 
-  import zoomascii
+        import zoomascii
 
-  # encode data as QP, zoom style
-  encoded_data = zoomascii.b2a_qp(text_data)
+        # encode data as QP, zoom style
+        encoded_data = zoomascii.b2a_qp(text_data)
 
-  # swapcase so fast
-  text = zoomascii.swapcase(text)
+        # swapcase so fast
+        text = zoomascii.swapcase(text)
 
 Implementation Notes
 ====================
