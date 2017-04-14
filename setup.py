@@ -8,8 +8,8 @@ ext = Extension('zoomascii',
                 )
 
 setup(name         = "zoomascii",
-      version      = "0.1",
-      description  = "A zoomascii utility",
+      version      = "0.4",
+      description  = "Faster versions of binascii functions.",
       author       = "Sam Tregar",
       author_email = 'sam@tregar.com',
       platforms    = ["any"],
@@ -18,4 +18,5 @@ setup(name         = "zoomascii",
       packages     = find_packages(),
       ext_modules  = [ext],
       test_suite   = "tests",
+      headers      = ['src/zoomascii.h']
       )

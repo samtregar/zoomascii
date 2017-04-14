@@ -1,0 +1,2 @@
+# Include the test data files
+recursive-include data *
