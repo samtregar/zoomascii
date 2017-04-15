@@ -36,6 +36,16 @@ Or clone it from github and install manually:
         # swapcase so fast
         text = zoomascii.swapcase(text)
 
+## Benchmarks
+
+![Benchark Chart](http://i.imgur.com/QBV9z7h.png)
+
+You can find the benchmark script in bin/bench.py.  It runs each
+encoder across a series of sample files in data/ and the results are
+runs per second.  The total input size for each run is 472k.  The
+quopri module is being forced to use its Python implementation rather
+than binascii which it will use if installed.
+
 ## Implementation Notes
 
 The implementation of b2a_qp follows the specification for
