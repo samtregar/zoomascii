@@ -16,6 +16,7 @@ class BasicTests(unittest.TestCase):
     def test_qp(self):
         self.assertEqual(zoomascii.b2a_qp("dude"), 'dude')
         self.assertEqual(zoomascii.b2a_qp("dude\t\r\n"), "dude=09\r\n")
+        self.assertEqual(zoomascii.b2a_qp("dude   "), "dude  =20")
 
         # can't test for equality of output for zoomascii VS binascii
         # - QP isn't a deterministic format and zoomascii will make

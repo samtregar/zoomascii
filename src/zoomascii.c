@@ -167,8 +167,8 @@ b2a_qp(PyObject* self, PyObject* args) {
       i += x-1;
       
     } else if (c == ' ' || c == '\t') {
-      // space or tab is ok unless the next sequence is a CRLF
-      if (i < input_len+2 && input[i+1] == CR && input[i+2] == LF) {
+      // space or tab is ok unless the next sequence is a CRLF or at the end
+      if (i+2 > input_len || (input[i+1] == CR && input[i+2] == LF)) {
         encode_qp(c, output, &j);
         line_len+=3;
       } else {
