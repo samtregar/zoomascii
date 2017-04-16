@@ -161,8 +161,8 @@ b2a_qp(PyObject* self, PyObject* args) {
         if (cx < 33 || cx > 126 || cx == 61)
           break;
       }
+      memcpy(output+j, input+i, x);
       j += x;
-      memcpy(output+j-x, input+i, x);
       line_len += x;
       i += x-1;
       
