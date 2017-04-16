@@ -177,8 +177,7 @@ b2a_qp(PyObject* self, PyObject* args) {
       }
     } else if (c == CR && i+1 < input_len && input[i+1] == LF) {
       // CRLF can go as-is
-      output[j] = CR;
-      output[j+1] = LF;
+      memcpy(output+j, "\r\n", 2);
       j += 2;
       i++;
       line_len = 0;
@@ -190,9 +189,7 @@ b2a_qp(PyObject* self, PyObject* args) {
 
     // soft line break at max
     if (line_len >= MAX_LINE_LENGTH) {
-      output[j] = '=';
-      output[j+1] = CR;
-      output[j+2] = LF;
+      memcpy(output+j, "=\r\n", 3);
       j += 3;
       line_len = 0;
     }
