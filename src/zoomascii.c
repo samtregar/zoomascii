@@ -1,4 +1,5 @@
 #include <Python.h>
+#include "py3c.h"
 #include "zoomascii.h"
 
 #ifndef INLINE
@@ -35,13 +36,12 @@ swapcase(PyObject* self, PyObject* args) {
     // get the input string without copying it
     if (!PyArg_ParseTuple(args, "S", &input_obj))
         return NULL;
-    input = (unsigned char *) PyString_AS_STRING(input_obj);
-    len = PyString_Size(input_obj);
+    input = PyStr_AsUTF8AndSize(input_obj, &len);
     
     // get a string to work on, in a format we can return directly
     // without more copying
-    ret = PyString_FromStringAndSize(NULL, len);
-    output = PyString_AS_STRING(ret);
+    ret = PyStr_FromStringAndSize(NULL, len);
+    output = PyStr_AsString(ret);
 
     // process 64bit chunks, worth around 20% speedup in testing
     front_len = len - (len % 8);
@@ -87,6 +87,16 @@ int roundUp4k(int numToRound) {
   return numToRound + multiple - remainder;
 }
 
+#if IS_PY3
+int do_resize(PyObject **obj, int size) {
+  return PyUnicode_Resize(obj, size);
+}
+#else
+int do_resize(PyObject **obj, int size) {
+  return _PyString_Resize(obj, size);
+}
+#endif
+
 #define CR 13
 #define LF 10
 #define MAX_LINE_LENGTH 72
@@ -115,13 +125,13 @@ b2a_qp(PyObject* self, PyObject* args) {
   // be more careful here and use less memory
   output_len = input_len*2;
   output_len = roundUp4k(output_len);
-  ret = PyString_FromStringAndSize(NULL, output_len);
+  ret = PyStr_FromStringAndSize(NULL, output_len);
   if (!ret) {
     PyBuffer_Release(&input_buf);
     return NULL;
   }
 
-  output = PyString_AS_STRING(ret);
+  output = PyStr_AsString(ret);
   if (!output) {
     PyBuffer_Release(&input_buf);
     Py_DECREF(ret);
@@ -136,12 +146,12 @@ b2a_qp(PyObject* self, PyObject* args) {
     if (j+3 > output_len) {
       // get another 4k and realloc the string
       output_len = roundUp4k(j+3);
-      if (_PyString_Resize(&ret, output_len) == -1) {
+      if (do_resize(&ret, output_len) == -1) {
         PyBuffer_Release(&input_buf);
         Py_DECREF(ret); 
         return NULL;
       }
-      output = PyString_AS_STRING(ret);
+      output = PyStr_AsString(ret);
     }
     
     c = input[i];
@@ -205,7 +215,24 @@ b2a_qp(PyObject* self, PyObject* args) {
   return ret;
 }
 
+#if IS_PY3
+
+static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,  /* m_base */
+    "zoomascii",            /* m_name */
+    NULL,                   /* m_doc */
+    -1,                     /* m_size */
+    ZoomMethods             /* m_methods */
+};
+
+PyMODINIT_FUNC PyInit_zoomascii(void) {
+  _do_swapcase_init();
+  return PyModule_Create(&moduledef);
+}
+
+#else
 PyMODINIT_FUNC initzoomascii(void) {
   (void) Py_InitModule("zoomascii", ZoomMethods);
   _do_swapcase_init();
 }
+#endif
