@@ -92,14 +92,18 @@ int roundUp4k(int numToRound) {
 #define MAX_LINE_LENGTH 72
 
 static PyObject*
-b2a_qp(PyObject* self, PyObject* args) {
+b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_buffer input_buf;
   PyObject *ret;
   char *input, *output, c, cx;
   int input_len, i, j, x, output_len, line_len;
 
+  static char *kwlist[] = {"string", "encode_leading_dot", NULL};
+  int encode_leading_dot = 1;
+  
   // get the input string without copying it
-  if (!PyArg_ParseTuple(args, "s*", &input_buf))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s*|i", kwlist,
+                                   &input_buf, &encode_leading_dot))
     return NULL;
   input = input_buf.buf;
   input_len = input_buf.len;
@@ -145,7 +149,7 @@ b2a_qp(PyObject* self, PyObject* args) {
     }
     
     c = input[i];
-    if (c == '.' && line_len == 0) {
+    if (c == '.' && line_len == 0 && encode_leading_dot) {
       // not actually part of QP encoding but SMTP needs this - encode
       // leading . on line
       encode_qp(c, output, &j);

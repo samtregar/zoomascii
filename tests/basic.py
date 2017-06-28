@@ -18,6 +18,13 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(zoomascii.b2a_qp("dude\t\r\n"), "dude=09\r\n")
         self.assertEqual(zoomascii.b2a_qp("dude   "), "dude  =20")
 
+        # test dot encoding option
+        self.assertEqual(zoomascii.b2a_qp("dude   \r\n.foo"),
+                         "dude  =20\r\n=2Efoo")
+        self.assertEqual(zoomascii.b2a_qp("dude   \r\n.foo",
+                                          encode_leading_dot=False),
+                         "dude  =20\r\n.foo")
+
         # can't test for equality of output for zoomascii VS binascii
         # - QP isn't a deterministic format and zoomascii will make
         # different decisions about the data

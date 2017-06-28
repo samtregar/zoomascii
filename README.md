@@ -33,6 +33,10 @@ Or clone it from github and install manually:
         # encode data as QP, zoom style
         encoded_data = zoomascii.b2a_qp(text_data)
 
+        # optionally turn off encoding leading periods, which is nice
+        # for SMTP but probably your lib already handles this
+        encoded_data = zoomascii.b2a_qp(text_data, encode_leading_dot=False)
+
         # swapcase so fast
         text = zoomascii.swapcase(text)
 
