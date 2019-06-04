@@ -25,6 +25,13 @@ class BasicTests(unittest.TestCase):
                                           encode_leading_dot=False),
                          "dude  =20\r\n.foo")
 
+        # worst case string expansion
+        self.assertEqual(zoomascii.b2a_qp("=" * 10),
+                         '=3D' * 10)
+        self.assertEqual(zoomascii.b2a_qp("=" * 100),
+                         '=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D')
+
+
         # can't test for equality of output for zoomascii VS binascii
         # - QP isn't a deterministic format and zoomascii will make
         # different decisions about the data
