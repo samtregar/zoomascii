@@ -9,6 +9,14 @@
 # endif
 #endif
 
+#if __GNUC__ >= 3
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#define likely(x) (x)
+#define unlikely(x) (x)
+#endif
+
 /* could just inline this table, but I'm lazy, maybe when it's release-ready */
 unsigned char swapcase_table[256];
 void _do_swapcase_init(void) {
@@ -137,7 +145,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   for (i = 0; i < input_len; i++) {
     // check that output doesn't need to be resized - we need at least
     // three characters so we can write out an escape
-    if (j+3 > output_len) {
+    if (unlikely(j+3 > output_len)) {
       // get another 4k and realloc the string
       output_len = roundUp4k(j+3);
       if (_PyString_Resize(&ret, output_len) == -1) {
@@ -154,7 +162,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       // leading . on line
       encode_qp(c, output, &j);
       line_len+=3;
-    } else if (c >= 33 && c <= 126 && c != 61) {
+    } else if (likely(c >= 33 && c <= 126 && c != 61)) {
       // see if we can memcpy a bunch of the string all at once -
       // faster than doing it char by char
       for(x = 1; x < MAX_LINE_LENGTH-line_len; x++) {
