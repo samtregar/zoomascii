@@ -8,28 +8,28 @@ corpus = []
 data_dir = path.dirname(__file__) + '/../data'
 for fname in listdir(data_dir):
     with open(data_dir + '/' + fname, 'rb') as fh:
-        data = ''.join(fh.readlines())
+        data = fh.read()
         corpus.append(data)
 
 
 class BasicTests(unittest.TestCase):
     def test_qp(self):
-        self.assertEqual(zoomascii.b2a_qp("dude"), 'dude')
-        self.assertEqual(zoomascii.b2a_qp("dude\t\r\n"), "dude=09\r\n")
-        self.assertEqual(zoomascii.b2a_qp("dude   "), "dude  =20")
+        self.assertEqual(zoomascii.b2a_qp("dude"), b'dude')
+        self.assertEqual(zoomascii.b2a_qp("dude\t\r\n"), b"dude=09\r\n")
+        self.assertEqual(zoomascii.b2a_qp("dude   "), b"dude  =20")
 
         # test dot encoding option
         self.assertEqual(zoomascii.b2a_qp("dude   \r\n.foo"),
-                         "dude  =20\r\n=2Efoo")
+                         b"dude  =20\r\n=2Efoo")
         self.assertEqual(zoomascii.b2a_qp("dude   \r\n.foo",
                                           encode_leading_dot=False),
-                         "dude  =20\r\n.foo")
+                         b"dude  =20\r\n.foo")
 
         # worst case string expansion
         self.assertEqual(zoomascii.b2a_qp("=" * 10),
-                         '=3D' * 10)
+                         b'=3D' * 10)
         self.assertEqual(zoomascii.b2a_qp("=" * 100),
-                         '=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D')
+                         b'=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=\r\n=3D=3D=3D=3D')
 
 
         # can't test for equality of output for zoomascii VS binascii
@@ -41,7 +41,7 @@ class BasicTests(unittest.TestCase):
                              data)
 
     def test_swapcase(self):
-        self.assertEqual(zoomascii.swapcase("dude"), 'DUDE')
+        self.assertEqual(zoomascii.swapcase("dude"), b'DUDE')
 
         for data in corpus:
             self.assertEqual(zoomascii.swapcase(data), data.swapcase())
