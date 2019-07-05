@@ -2,8 +2,8 @@
 
 Faster versions of Python ASCII functions, in the theme of binascii
 with added zoom.  These functions only work on ASCII strings and will
-trade memory for speed (within reason).  Currently targeting Python
-2.7.x, but patches welcome for Python 3.x.
+trade memory for speed (within reason).  Python 2.7.x and 3.5+ are both 
+supported.
 
 ## Currently Implemented
 
