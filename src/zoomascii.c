@@ -108,7 +108,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_buffer input_buf;
   PyObject *ret;
   char *input, *output, c, cx;
-  int input_len, i, j, x, output_len, line_len;
+  int input_len, i, j, x, output_len, line_len, max_x;
 
   static char *kwlist[] = {"string", "encode_leading_dot", NULL};
   int encode_leading_dot = 1;
@@ -173,10 +173,15 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
     } else if (likely(c >= 33 && c <= 126 && c != 61)) {
       // see if we can memcpy a bunch of the string all at once -
       // faster than doing it char by char
-      for(x = 1; x < MAX_LINE_LENGTH-line_len; x++) {
-        if (unlikely(i+x+1 > input_len || j+x+1 > output_len))
-          break;
+      max_x = MAX_LINE_LENGTH-line_len;
 
+      // make sure this won't run us over our input or output limits
+      if (unlikely(i+max_x >= input_len))
+        max_x = input_len-i-1;
+      if (unlikely(j+max_x >= output_len))
+        max_x = output_len-j-1;
+      
+      for(x = 1; x < max_x; x++) {
         cx = input[i+x];
         if (unlikely(cx < 33 || cx > 126 || cx == 61))
           break;
