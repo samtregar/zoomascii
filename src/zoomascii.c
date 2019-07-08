@@ -102,12 +102,13 @@ int roundUp4k(int numToRound) {
 #define CR 13
 #define LF 10
 #define MAX_LINE_LENGTH 72
+#define NEEDS_ENCODE(x) (x < 33 || x > 126 || x == 61)
 
 static PyObject*
 b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_buffer input_buf;
   PyObject *ret;
-  char *input, *output, c, cx;
+  char *input, *output, c;
   int input_len, i, j, x, output_len, line_len, max_x;
 
   static char *kwlist[] = {"string", "encode_leading_dot", NULL};
@@ -170,7 +171,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       encode_qp(c, output+j);
       j+=3;
       line_len+=3;
-    } else if (likely(c >= 33 && c <= 126 && c != 61)) {
+    } else if (likely(!NEEDS_ENCODE(c))) {
       // see if we can memcpy a bunch of the string all at once -
       // faster than doing it char by char
       max_x = MAX_LINE_LENGTH-line_len;
@@ -182,10 +183,16 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         max_x = output_len-j-1;
       
       for(x = 1; x < max_x; x++) {
-        cx = input[i+x];
-        if (unlikely(cx < 33 || cx > 126 || cx == 61))
+        if (unlikely(NEEDS_ENCODE(input[i+x]))) {
+          // special-case spaces here since they're very common, we
+          // can memcpy them unless they're at the end or followed by
+          // a CR
+          if (likely(input[i+x] == ' ' && x+1 < max_x && input[i+x+1] != CR))
+            continue;
           break;
+        }
       }
+      
       memcpy(output+j, input+i, x);
       j += x;
       line_len += x;
