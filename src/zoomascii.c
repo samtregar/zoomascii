@@ -78,14 +78,27 @@ swapcase(PyObject* self, PyObject* args) {
 }
 
 
-INLINE void encode_qp(const char c, char *output) {
-  char c2;
+INLINE void do_encode_qp(const unsigned char c, char *output) {
+  unsigned char c2;
   output[0] = '=';
   c2 = (c >> 4) & 0xf;
   output[1] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
   c2 = c & 0xf;
   output[2] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
 }
+
+char qp_table[256][3];
+void _do_qp_init(void) {
+  unsigned int c = 0;
+  do {
+    do_encode_qp(c, qp_table[c]);
+  } while (c++ != 256);
+}
+
+INLINE void encode_qp(const unsigned char c, char *output) {
+  memcpy(output, qp_table[(unsigned int) c], 3);
+}
+
 
 // used to round up the output buffer sizes to 4k + 1 so we always
 // have room to work without frequent reallocs and checks
@@ -246,12 +259,14 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 PyMODINIT_FUNC initzoomascii(void) {
   (void) Py_InitModule("zoomascii", ZoomMethods);
   _do_swapcase_init();
+  _do_qp_init();
 }
 #else
 PyMODINIT_FUNC
 PyInit_zoomascii(void)
 {
     _do_swapcase_init();
+    _do_qp_init();
     return PyModule_Create(&zoomasciimodule);
 }
 #endif
