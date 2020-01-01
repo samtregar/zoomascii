@@ -24,6 +24,7 @@ while(True):
         length = randint(1,50000)
         while len(text) < length:
             text += fake.text()
+        text = text.encode()
 
     qp = zoomascii.b2a_qp(text)
     if (binascii.a2b_qp(qp) != text):
@@ -32,7 +33,7 @@ while(True):
         raise Exception("Failure found, wrote triggering data to out.txt")
 
     if count % 100 == 0:
-        print "%d of %d tests completed." % (count, total)
+        print("%d of %d tests completed." % (count, total))
     if count == total:
         break
         
