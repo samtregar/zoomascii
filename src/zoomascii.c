@@ -23,6 +23,12 @@
 #define _PyBytes_Resize _PyString_Resize
 #endif
 
+// support Python <3.9
+#if PY_VERSION_HEX < 0x030900A4 && !defined(Py_SET_SIZE)
+static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size) { ob->ob_size = size; }
+#define Py_SET_SIZE(ob, size) _Py_SET_SIZE((PyVarObject*)(ob), size)
+#endif
+
 /* could just inline this table, but I'm lazy, maybe when it's release-ready */
 unsigned char swapcase_table[256];
 void _do_swapcase_init(void) {
@@ -246,7 +252,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   // shorten the string by assigning to size directly - seems to work
   // fine, may not be 100% legal, need to check for memory leaks with
   // this method.
-  Py_SIZE(ret) = j;
+  Py_SET_SIZE(ret, j);
                   
   PyBuffer_Release(&input_buf);
   return ret;
