@@ -8,7 +8,7 @@ ext = Extension('zoomascii',
                 )
 
 setup(name         = "zoomascii",
-      version      = "0.9",
+      version      = "1.0",
       description  = "Faster versions of binascii functions.",
       author       = "Sam Tregar",
       author_email = 'sam@tregar.com',

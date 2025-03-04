@@ -98,7 +98,7 @@ void _do_qp_init(void) {
   unsigned int c = 0;
   do {
     do_encode_qp(c, qp_table[c]);
-  } while (c++ != 256);
+  } while (c++ != 255);
 }
 
 INLINE void encode_qp(const unsigned char c, char *output) {
