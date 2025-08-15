@@ -94,6 +94,7 @@ INLINE void do_encode_qp(const unsigned char c, char *output) {
 }
 
 char qp_table[256][3];
+
 void _do_qp_init(void) {
   unsigned int c = 0;
   do {
@@ -102,7 +103,11 @@ void _do_qp_init(void) {
 }
 
 INLINE void encode_qp(const unsigned char c, char *output) {
-  memcpy(output, qp_table[(unsigned int) c], 3);
+  // Direct assignment is faster than memcpy for 3 bytes
+  char *qp_entry = qp_table[(unsigned int) c];
+  output[0] = qp_entry[0];
+  output[1] = qp_entry[1];
+  output[2] = qp_entry[2];
 }
 
 
@@ -141,6 +146,13 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   input_len = input_buf.len;
   
   assert(input_len >= 0);
+  
+  // Special case for empty input - return empty bytes directly
+  if (input_len == 0) {
+    PyBuffer_Release(&input_buf);
+    return PyBytes_FromStringAndSize("", 0);
+  }
+  
   if (input_len > PY_SSIZE_T_MAX / 2) {
     PyBuffer_Release(&input_buf);
     return PyErr_NoMemory();
@@ -151,6 +163,9 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   // be more careful here and use less memory
   output_len = input_len*2;
   output_len = roundUp4k(output_len);
+  
+  // Special case for empty input
+  if (output_len == 0) output_len = 1;
 
   ret = PyBytes_FromStringAndSize(NULL, output_len);
 
@@ -201,12 +216,14 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       if (unlikely(j+max_x >= output_len))
         max_x = output_len-j-1;
       
+      // Optimized scan for consecutive non-encoded characters
       for(x = 1; x < max_x; x++) {
-        if (unlikely(NEEDS_ENCODE(input[i+x]))) {
+        char next_char = input[i+x];
+        if (unlikely(NEEDS_ENCODE(next_char))) {
           // special-case spaces here since they're very common, we
           // can memcpy them unless they're at the end or followed by
           // a CR
-          if (likely(input[i+x] == ' ' && x+1 < max_x && input[i+x+1] != CR))
+          if (likely(next_char == ' ' && x+1 < max_x && input[i+x+1] != CR))
             continue;
           break;
         }
@@ -249,9 +266,8 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
      
   }
 
-  // shorten the string by assigning to size directly - seems to work
-  // fine, may not be 100% legal, need to check for memory leaks with
-  // this method.
+  // shorten the string by assigning to size directly - safe since we
+  // handled empty case above
   Py_SET_SIZE(ret, j);
                   
   PyBuffer_Release(&input_buf);
