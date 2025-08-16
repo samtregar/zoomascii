@@ -29,20 +29,6 @@ static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size) { ob->ob_size 
 #define Py_SET_SIZE(ob, size) _Py_SET_SIZE((PyVarObject*)(ob), size)
 #endif
 
-/* could just inline this table, but I'm lazy, maybe when it's release-ready */
-unsigned char swapcase_table[256];
-void _do_swapcase_init(void) {
-  unsigned int c = 0;
-  do {
-    if (c>='A' && c<='Z') {
-      swapcase_table[c] = c + 32;
-    } else if (c>='a' && c<='z') {
-      swapcase_table[c] = c - 32;
-    } else {
-      swapcase_table[c] = c;
-    }
-  } while (c++ != 255);
-}
 
 static PyObject*
 swapcase(PyObject* self, PyObject* args) {
@@ -93,18 +79,10 @@ INLINE void do_encode_qp(const unsigned char c, char *output) {
   output[2] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
 }
 
-char qp_table[256][3];
 
-void _do_qp_init(void) {
-  unsigned int c = 0;
-  do {
-    do_encode_qp(c, qp_table[c]);
-  } while (c++ != 255);
-}
-
-INLINE void encode_qp(const unsigned char c, char *output) {
+static INLINE void encode_qp(const unsigned char c, char *output) {
   // Direct assignment is faster than memcpy for 3 bytes
-  char *qp_entry = qp_table[(unsigned int) c];
+  const char *qp_entry = qp_table[(unsigned int) c];
   output[0] = qp_entry[0];
   output[1] = qp_entry[1];
   output[2] = qp_entry[2];
@@ -280,15 +258,11 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 #if PY_MAJOR_VERSION < 3
 PyMODINIT_FUNC initzoomascii(void) {
   (void) Py_InitModule("zoomascii", ZoomMethods);
-  _do_swapcase_init();
-  _do_qp_init();
 }
 #else
 PyMODINIT_FUNC
 PyInit_zoomascii(void)
 {
-    _do_swapcase_init();
-    _do_qp_init();
     return PyModule_Create(&zoomasciimodule);
 }
 #endif
