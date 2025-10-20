@@ -162,18 +162,22 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   j = 0;
   line_len = 0;
+  // Pre-compute safe limit - only check buffer when we get close
+  int safe_limit = output_len - 76; // MAX_LINE_LENGTH + 3 for escape + 3 for soft break
+
   for (i = 0; i < input_len; i++) {
     // check that output doesn't need to be resized - we need at least
     // three characters so we can write out an escape
-    if (unlikely(j+3 > output_len)) {
+    if (unlikely(j >= safe_limit)) {
       // get another 4k and realloc the string
-      output_len = roundUp4k(j+3);
+      output_len = roundUp4k(j + input_len - i + 100);
       if (_PyBytes_Resize(&ret, output_len) == -1) {
         PyBuffer_Release(&input_buf);
-        Py_DECREF(ret); 
+        Py_DECREF(ret);
         return NULL;
       }
       output = PyBytes_AS_STRING(ret);
+      safe_limit = output_len - 76;
     }
     
     c = input[i];
@@ -188,12 +192,10 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       // faster than doing it char by char
       max_x = MAX_LINE_LENGTH-line_len;
 
-      // make sure this won't run us over our input or output limits
+      // make sure this won't run us over our input limit
       if (unlikely(i+max_x >= input_len))
         max_x = input_len-i-1;
-      if (unlikely(j+max_x >= output_len))
-        max_x = output_len-j-1;
-      
+
       // Optimized scan for consecutive non-encoded characters
       for(x = 1; x < max_x; x++) {
         char next_char = input[i+x];
@@ -224,7 +226,8 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       }
     } else if (unlikely(c == CR && i+1 < input_len && input[i+1] == LF)) {
       // CRLF can go as-is
-      memcpy(output+j, "\r\n", 2);
+      output[j] = '\r';
+      output[j+1] = '\n';
       j += 2;
       i++;
       line_len = 0;
@@ -237,7 +240,9 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     // soft line break at max
     if (unlikely(line_len >= MAX_LINE_LENGTH)) {
-      memcpy(output+j, "=\r\n", 3);
+      output[j] = '=';
+      output[j+1] = '\r';
+      output[j+2] = '\n';
       j += 3;
       line_len = 0;
     }
