@@ -1,6 +1,10 @@
 #include <Python.h>
 #include "zoomascii.h"
 
+#ifdef __SSE2__
+#include <emmintrin.h>
+#endif
+
 #ifndef INLINE
 # if __GNUC__ && !__GNUC_STDC_INLINE__
 #  define INLINE extern inline
@@ -193,20 +197,77 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         max_x = input_len-i-1;
       if (unlikely(j+max_x >= output_len))
         max_x = output_len-j-1;
-      
-      // Optimized scan for consecutive non-encoded characters
-      for(x = 1; x < max_x; x++) {
-        char next_char = input[i+x];
-        if (unlikely(NEEDS_ENCODE(next_char))) {
-          // special-case spaces here since they're very common, we
-          // can memcpy them unless they're at the end or followed by
-          // a CR
-          if (likely(next_char == ' ' && x+1 < max_x && input[i+x+1] != CR))
-            continue;
+
+      // keep max_x >= 1 so x can never be clamped to 0 below - x
+      // must stay >= 1 or the outer loop would move backwards
+      if (unlikely(max_x < 1))
+        max_x = 1;
+
+      // scan for consecutive non-encoded characters - spaces and tabs
+      // are included in the run since they only need encoding before
+      // a line break or at the end of the input
+      x = 1;
+#ifdef __SSE2__
+      // SSE2 version of the scan below: classify 16 bytes per
+      // iteration instead of one. Each _mm_* intrinsic compiles to a
+      // single instruction operating on all 16 bytes of a 128-bit
+      // register at once. A byte is "plain" (can pass through
+      // unencoded) if it's 32-126 but not '=' (61), or tab (9) -
+      // the same predicate encoded in the qp_plain table.
+      //
+      // the i+x+16 bound keeps the 16-byte loads inside the input
+      // buffer; any tail shorter than 16 bytes falls through to the
+      // scalar loop below, which picks up where x left off.
+      while (x < max_x && i + x + 16 <= input_len) {
+        // unaligned load of the next 16 input bytes into one register
+        __m128i v = _mm_loadu_si128((const __m128i*)(input + i + x));
+
+        // lane-wise compares: each of the 16 bytes is compared
+        // against a register with the constant in every byte
+        // (_mm_set1_epi8), producing 0xFF where true, 0x00 where
+        // false. AND-ing the two range checks gives 32 <= c <= 126.
+        // note the compares are *signed*: bytes 128-255 are negative
+        // so they fail c > 31, which is exactly what we want.
+        __m128i plain = _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(31)),
+                                      _mm_cmplt_epi8(v, _mm_set1_epi8(127)));
+
+        // andnot(a, b) = (NOT a) AND b - knock '=' back out of the
+        // plain set ...
+        plain = _mm_andnot_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(61)), plain);
+        // ... and OR tab back in
+        plain = _mm_or_si128(plain, _mm_cmpeq_epi8(v, _mm_set1_epi8(9)));
+
+        // movemask packs the top bit of each byte lane into a 16-bit
+        // int: bit n set means byte n is plain. XOR flips it so a
+        // set bit means "needs encoding" and mask == 0 means all 16
+        // bytes are plain.
+        unsigned int mask = _mm_movemask_epi8(plain) ^ 0xFFFF;
+        if (mask) {
+          // count-trailing-zeros gives the index of the lowest set
+          // bit, i.e. the offset of the first byte needing encoding
+          x += __builtin_ctz(mask);
           break;
         }
+        x += 16;
       }
-      
+      // the 16-at-a-time strides can overshoot the line-length limit;
+      // max_x >= 1 is guaranteed above so this can't zero out x
+      if (x > max_x)
+        x = max_x;
+#endif
+      for(; x < max_x; x++) {
+        if (unlikely(!qp_plain[(unsigned char)input[i+x]]))
+          break;
+      }
+
+      // back off a trailing space or tab that lands before a CR or
+      // the end of the input - the outer loop will encode it. The
+      // first char of the run is never a space/tab so x stays >= 1.
+      if (unlikely((input[i+x-1] == ' ' || input[i+x-1] == '\t') &&
+                   (i+x >= input_len || input[i+x] == CR)))
+        x--;
+
+
       memcpy(output+j, input+i, x);
       j += x;
       line_len += x;
