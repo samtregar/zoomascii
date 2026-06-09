@@ -8,7 +8,7 @@ supported.
 ## Currently Implemented
 
 b2a_qp - Hot code for email sending apps that use QP encoding, and the
-reason I started this library.  Around 3x faster than binascii.b2a_qp.
+reason I started this library.  Around 5x faster than binascii.b2a_qp.
 
 swapcase - over 10x faster than Python's builtin swapcase() for ASCII
 strings.  (I don't expect this is actually useful, just did it as a
@@ -50,6 +50,9 @@ runs per second.  The total input size for each run is 472k.  The
 quopri module is being forced to use its Python implementation rather
 than binascii which it will use if installed.
 
+Note the chart above predates the 2026 optimizations - b2a_qp is now
+around 5x faster than binascii.b2a_qp on the same corpus.
+
 ## Implementation Notes
 
 The implementation of b2a_qp follows the specification for
@@ -57,6 +60,11 @@ Quoted-Printable encoding in RFC 2045
 (https://www.ietf.org/rfc/rfc2045.txt).  The only exception is that
 periods at the beginning of lines are always encoded, which is useful
 for SMTP and allowed by the spec.
+
+On x86-64 the encoder uses SSE2 instructions to scan input 16 bytes
+at a time; other architectures use a portable lookup-table fallback.
+No special compiler flags or CPU features beyond baseline x86-64 are
+required.
 
 The implementation does not exactly match binascii's implementation -
 in particular it does not attempt to pass through CR or LF characters
