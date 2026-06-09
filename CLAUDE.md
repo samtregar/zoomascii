@@ -45,11 +45,12 @@ This is a Python C extension module that provides faster implementations of ASCI
 
 **b2a_qp (Quoted-Printable Encoding)**
 - RFC 2045 compliant implementation
-- ~3x faster than `binascii.b2a_qp`
+- ~5x faster than `binascii.b2a_qp`
 - Optional `encode_leading_dot` parameter (default: True) for SMTP compatibility
   - When True: Encodes leading periods on lines (required for SMTP)
   - When False: Passes through leading periods unchanged
 - Uses precompiled lookup tables for performance (initialized at compile time)
+- Scans runs of pass-through characters 16 bytes at a time with SSE2 intrinsics (`#ifdef __SSE2__`, present on all x86-64; scalar lookup-table fallback for other architectures)
 - Properly handles CRLF line endings (designed for text mode operation)
 
 **swapcase**
@@ -70,6 +71,16 @@ The `data/` directory contains various text files used for testing and benchmark
 - Measures operations per second across the full test corpus
 - Use this to validate performance optimizations
 
+**bin/bench_zoom.py** - Tight benchmark of `b2a_qp` only
+- Run with: `PYTHONPATH=. python3 bin/bench_zoom.py`
+- Reports best-of-10 ops/sec - prefer this over single bench.py runs when comparing optimizations, since single runs can vary by ±20% with machine load
+
+**bin/verify_correct.py** - Correctness harness for `b2a_qp`
+- Run with: `PYTHONPATH=. python3 bin/verify_correct.py`
+- Round-trips the corpus, ~35 edge cases, and 400 random inputs through `binascii.a2b_qp`
+- Checks RFC 2045 line-length and trailing-whitespace rules plus SMTP leading-dot encoding
+- Run this after any change to the C encoding logic
+
 **bin/fuzz_test.py** - Stress testing utility
 - Generates random data using the faker library
 - Tests for segfaults, memory leaks, and correctness
@@ -78,9 +89,18 @@ The `data/` directory contains various text files used for testing and benchmark
 
 ### Performance Notes
 - Module trades memory for speed through precomputed lookup tables
-- Recent optimizations replaced runtime initialization with compile-time lookup tables
 - Benchmarks show significant performance improvements over standard library equivalents:
-  - b2a_qp: ~3x faster than binascii.b2a_qp
+  - b2a_qp: ~5x faster than binascii.b2a_qp (~2,450 vs ~460 ops/sec on the corpus, June 2026)
   - swapcase: ~10x faster than Python's builtin
 - Benchmark results are measured in operations per second across a 472KB corpus
-- Run benchmarks with: `PYTHONPATH=. python3 bin/bench.py`
+- Run benchmarks with: `PYTHONPATH=. python3 bin/bench.py` (or `bin/bench_zoom.py` for low-noise comparisons)
+
+### Optimization History (June 2026)
+What got b2a_qp from ~3x to ~5x faster than binascii (~1,630 to ~2,450 ops/sec):
+- Replaced the `NEEDS_ENCODE` comparison chain and per-character space special-case in the run scan with a 256-byte `qp_plain` lookup table; spaces/tabs join runs with a one-char back-off before CR or end of input (+16%)
+- SSE2 vectorized run scanning, 16 bytes per compare via movemask/ctz (+30% more)
+
+Tried and rejected - don't re-attempt these without new evidence:
+- **Compiler flags** (`-O3`, `-march=native`): ~1% change, within benchmark noise. The hot loop is branch-bound, not helped by auto-vectorization.
+- **AVX2 32-bytes-per-iteration scan**: ~12% *slower* than SSE2 (~2,150 vs ~2,450 ops/sec). Runs of plain characters are too short to amortize the wider vectors - lines are capped at 72 chars and the HTML corpus is full of `=` characters (attribute syntax) that terminate runs early.
+- **Compiling the SSE2 code with `-mavx2`**: +5% from VEX encoding, but not portable in a distributed package without runtime CPU dispatch; not worth the packaging complexity.
