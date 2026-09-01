@@ -5,14 +5,6 @@
 #include <emmintrin.h>
 #endif
 
-#ifndef INLINE
-# if __GNUC__ && !__GNUC_STDC_INLINE__
-#  define INLINE extern inline
-# else
-#  define INLINE inline
-# endif
-#endif
-
 #if __GNUC__ >= 3
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -74,153 +66,121 @@ swapcase(PyObject* self, PyObject* args) {
 }
 
 
-INLINE void do_encode_qp(const unsigned char c, char *output) {
-  unsigned char c2;
-  output[0] = '=';
-  c2 = (c >> 4) & 0xf;
-  output[1] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
-  c2 = c & 0xf;
-  output[2] = (c2 > 9) ? c2 + 'A' - 10 : c2 + '0';
-}
-
-
-static INLINE void encode_qp(const unsigned char c, char *output) {
-  // Direct assignment is faster than memcpy for 3 bytes
-  const char *qp_entry = qp_table[(unsigned int) c];
-  output[0] = qp_entry[0];
-  output[1] = qp_entry[1];
-  output[2] = qp_entry[2];
-}
-
-
-// used to round up the output buffer sizes to 4k + 1 so we always
+// used to round up the output buffer sizes to 4k so we always
 // have room to work without frequent reallocs and checks
-int roundUp4k(int numToRound) {
-  int multiple = 4 * 1024;
-  
-  int remainder = numToRound % multiple;
+static Py_ssize_t roundUp4k(Py_ssize_t numToRound) {
+  Py_ssize_t multiple = 4 * 1024;
+  Py_ssize_t remainder = numToRound % multiple;
   if (remainder == 0)
     return numToRound;
-  
   return numToRound + multiple - remainder;
 }
 
 #define CR 13
 #define LF 10
 #define MAX_LINE_LENGTH 72
-#define NEEDS_ENCODE(x) (x < 33 || x > 126 || x == 61)
+#define OUTPUT_SLACK 128
 
 static PyObject*
 b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_buffer input_buf;
   PyObject *ret;
-  char *input, *output, c;
-  int input_len, i, j, x, output_len, line_len, max_x;
+  const unsigned char *input;
+  char *output;
+  Py_ssize_t input_len, output_len, i, j, x, room, avail;
+  int line_len;
+  unsigned char c;
 
   static char *kwlist[] = {"string", "encode_leading_dot", NULL};
   int encode_leading_dot = 1;
-  
+
   // get the input string without copying it
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s*|i", kwlist,
                                    &input_buf, &encode_leading_dot))
     return NULL;
   input = input_buf.buf;
   input_len = input_buf.len;
-  
+
   assert(input_len >= 0);
-  
+
   // Special case for empty input - return empty bytes directly
   if (input_len == 0) {
     PyBuffer_Release(&input_buf);
     return PyBytes_FromStringAndSize("", 0);
   }
-  
+
   if (input_len > PY_SSIZE_T_MAX / 2) {
     PyBuffer_Release(&input_buf);
     return PyErr_NoMemory();
   }
-  
+
   // get a string to work on, in a format we can return directly
   // without more copying - start with a string twice as large, could
   // be more careful here and use less memory
-  output_len = input_len*2;
-  output_len = roundUp4k(output_len);
-  
-  // Special case for empty input
-  if (output_len == 0) output_len = 1;
+  output_len = roundUp4k(input_len * 2);
 
   ret = PyBytes_FromStringAndSize(NULL, output_len);
-
   if (!ret) {
     PyBuffer_Release(&input_buf);
     return NULL;
   }
-
   output = PyBytes_AS_STRING(ret);
-  
-  if (!output) {
-    PyBuffer_Release(&input_buf);
-    Py_DECREF(ret);
-    return NULL;
-  }
 
+  i = 0;
   j = 0;
   line_len = 0;
-  for (i = 0; i < input_len; i++) {
-    // check that output doesn't need to be resized - we need at least
-    // three characters so we can write out an escape
-    if (unlikely(j+3 > output_len)) {
+  while (i < input_len) {
+    // make sure one more iteration can't run off the end of the
+    // output: a run is at most MAX_LINE_LENGTH bytes, the 16-byte
+    // vector stores below can overshoot the run by up to 16 bytes, and
+    // an =XX escape or soft line break is 3 bytes plus a NUL. Checking
+    // once per iteration with a generous margin keeps the branch
+    // predictable and out of the inner loops.
+    if (unlikely(j + OUTPUT_SLACK > output_len)) {
       // get another 4k and realloc the string
-      output_len = roundUp4k(j+3);
+      output_len = roundUp4k(j + OUTPUT_SLACK);
       if (_PyBytes_Resize(&ret, output_len) == -1) {
         PyBuffer_Release(&input_buf);
-        Py_DECREF(ret); 
         return NULL;
       }
       output = PyBytes_AS_STRING(ret);
     }
-    
+
     c = input[i];
-    if (unlikely(c == '.' && line_len == 0 && encode_leading_dot)) {
+
+    if (likely(qp_plain[c])) {
+      const unsigned char *p = input + i;
+      char *q = output + j;
+
       // not actually part of QP encoding but SMTP needs this - encode
       // leading . on line
-      encode_qp(c, output+j);
-      j+=3;
-      line_len+=3;
-    } else if (likely(!NEEDS_ENCODE(c))) {
-      // see if we can memcpy a bunch of the string all at once -
-      // faster than doing it char by char
-      max_x = MAX_LINE_LENGTH-line_len;
+      if (unlikely(c == '.' && line_len == 0 && encode_leading_dot))
+        goto encode;
 
-      // make sure this won't run us over our input or output limits
-      if (unlikely(i+max_x >= input_len))
-        max_x = input_len-i-1;
-      if (unlikely(j+max_x >= output_len))
-        max_x = output_len-j-1;
+      // copy a run of plain characters straight through. The run is
+      // bounded by the space left on the line (line_len is always
+      // < MAX_LINE_LENGTH here, so room >= 1) and by the end of input.
+      room = MAX_LINE_LENGTH - line_len;
+      avail = input_len - i;
+      x = 0;
 
-      // keep max_x >= 1 so x can never be clamped to 0 below - x
-      // must stay >= 1 or the outer loop would move backwards
-      if (unlikely(max_x < 1))
-        max_x = 1;
-
-      // scan for consecutive non-encoded characters - spaces and tabs
-      // are included in the run since they only need encoding before
-      // a line break or at the end of the input
-      x = 1;
 #ifdef __SSE2__
-      // SSE2 version of the scan below: classify 16 bytes per
-      // iteration instead of one. Each _mm_* intrinsic compiles to a
-      // single instruction operating on all 16 bytes of a 128-bit
-      // register at once. A byte is "plain" (can pass through
-      // unencoded) if it's 32-126 but not '=' (61), or tab (9) -
-      // the same predicate encoded in the qp_plain table.
+      // classify and copy 16 bytes per iteration. Each _mm_* intrinsic
+      // compiles to a single instruction operating on all 16 bytes of
+      // a 128-bit register at once. The bytes are stored to the
+      // output before we know how many of them belong to the run -
+      // that's fine because the output buffer has slack and anything
+      // past the run gets overwritten by whatever comes next.
       //
-      // the i+x+16 bound keeps the 16-byte loads inside the input
-      // buffer; any tail shorter than 16 bytes falls through to the
+      // the x+16 <= avail bound keeps the loads inside the input
+      // buffer; a tail shorter than 16 bytes falls through to the
       // scalar loop below, which picks up where x left off.
-      while (x < max_x && i + x + 16 <= input_len) {
-        // unaligned load of the next 16 input bytes into one register
-        __m128i v = _mm_loadu_si128((const __m128i*)(input + i + x));
+      while (x + 16 <= avail) {
+        __m128i v = _mm_loadu_si128((const __m128i*)(p + x));
+        __m128i plain;
+        unsigned int mask;
+
+        _mm_storeu_si128((__m128i*)(q + x), v);
 
         // lane-wise compares: each of the 16 bytes is compared
         // against a register with the constant in every byte
@@ -228,9 +188,8 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         // false. AND-ing the two range checks gives 32 <= c <= 126.
         // note the compares are *signed*: bytes 128-255 are negative
         // so they fail c > 31, which is exactly what we want.
-        __m128i plain = _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(31)),
-                                      _mm_cmplt_epi8(v, _mm_set1_epi8(127)));
-
+        plain = _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(31)),
+                              _mm_cmplt_epi8(v, _mm_set1_epi8(127)));
         // andnot(a, b) = (NOT a) AND b - knock '=' back out of the
         // plain set ...
         plain = _mm_andnot_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(61)), plain);
@@ -241,80 +200,96 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         // int: bit n set means byte n is plain. XOR flips it so a
         // set bit means "needs encoding" and mask == 0 means all 16
         // bytes are plain.
-        unsigned int mask = _mm_movemask_epi8(plain) ^ 0xFFFF;
+        mask = _mm_movemask_epi8(plain) ^ 0xFFFF;
         if (mask) {
           // count-trailing-zeros gives the index of the lowest set
           // bit, i.e. the offset of the first byte needing encoding
           x += __builtin_ctz(mask);
-          break;
+          goto scanned;
         }
         x += 16;
+        if (x >= room)
+          goto scanned;
       }
-      // the 16-at-a-time strides can overshoot the line-length limit;
-      // max_x >= 1 is guaranteed above so this can't zero out x
-      if (x > max_x)
-        x = max_x;
 #endif
-      for(; x < max_x; x++) {
-        if (unlikely(!qp_plain[(unsigned char)input[i+x]]))
-          break;
+      {
+        Py_ssize_t limit = room < avail ? room : avail;
+        while (x < limit && qp_plain[p[x]]) {
+          q[x] = p[x];
+          x++;
+        }
       }
 
-      // back off a trailing space or tab that lands before a CR or
-      // the end of the input - the outer loop will encode it. The
-      // first char of the run is never a space/tab so x stays >= 1.
-      if (unlikely((input[i+x-1] == ' ' || input[i+x-1] == '\t') &&
-                   (i+x >= input_len || input[i+x] == CR)))
+    scanned:
+      // the 16-at-a-time strides can overshoot the line-length limit
+      if (x > room)
+        x = room;
+
+      // back off a trailing space or tab that lands before a CRLF or
+      // the end of the input so it gets encoded instead. x >= 1 here
+      // since p[0] is plain. If the run was that single space, x drops
+      // to 0 and the character is encoded below.
+      if (unlikely((p[x-1] == ' ' || p[x-1] == '\t') &&
+                   (x == avail ||
+                    (p[x] == CR && x + 1 < avail && p[x+1] == LF)))) {
         x--;
+        if (x == 0)
+          goto encode;
+      }
 
-
-      memcpy(output+j, input+i, x);
+      i += x;
       j += x;
       line_len += x;
-      i += x-1;
-      
-    } else if (c == ' ' || c == '\t') {
-      // space or tab is ok unless the next sequence is a CRLF or at the end
-      if (unlikely(i+2 > input_len || (input[i+1] == CR && input[i+2] == LF))) {
-        encode_qp(c, output+j);
-        j+=3;
-        line_len+=3;
-      } else {
-        output[j++] = c;
-        line_len++;
-      }
-    } else if (unlikely(c == CR && i+1 < input_len && input[i+1] == LF)) {
-      // CRLF can go as-is
-      memcpy(output+j, "\r\n", 2);
+
+    } else if (c == CR && i + 1 < input_len && input[i+1] == LF) {
+      // CRLF can go as-is and resets the line
+      output[j] = CR;
+      output[j+1] = LF;
       j += 2;
-      i++;
+      i += 2;
       line_len = 0;
+      continue;
+
     } else {
-      // encode all other chars
-      encode_qp(c, output+j);
-      j+=3;
-      line_len+=3;      
+    encode:
+      // encode all other chars as =XX. The table entries are 4 bytes
+      // (with a NUL) so this is a single 32-bit store; the extra byte
+      // is overwritten by the next output. Keep going while the
+      // following bytes also need encoding (multi-byte UTF-8 text)
+      // rather than paying the outer loop overhead for each one; the
+      // line-length check below is what bounds the output written.
+      for (;;) {
+        memcpy(output + j, qp_table[c], 4);
+        j += 3;
+        i++;
+        line_len += 3;
+        if (line_len >= MAX_LINE_LENGTH || i >= input_len)
+          break;
+        c = input[i];
+        if (qp_plain[c] || c == CR)
+          break;
+      }
     }
 
     // soft line break at max
     if (unlikely(line_len >= MAX_LINE_LENGTH)) {
-      memcpy(output+j, "=\r\n", 3);
+      memcpy(output + j, "=\r\n", 4);
       j += 3;
       line_len = 0;
     }
-     
   }
 
   // shorten the string by assigning to size directly - safe since we
-  // handled empty case above
+  // handled the empty case above. Not shrinking the allocation keeps
+  // the buffer size stable across calls, which lets glibc serve
+  // repeated large allocations from the heap instead of mmap'ing and
+  // page-faulting a fresh region every call.
+  output[j] = '\0';
   Py_SET_SIZE(ret, j);
-                  
+
   PyBuffer_Release(&input_buf);
   return ret;
 }
-
-
-
 
 #if PY_MAJOR_VERSION < 3
 PyMODINIT_FUNC initzoomascii(void) {

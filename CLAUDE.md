@@ -45,12 +45,15 @@ This is a Python C extension module that provides faster implementations of ASCI
 
 **b2a_qp (Quoted-Printable Encoding)**
 - RFC 2045 compliant implementation
-- ~5x faster than `binascii.b2a_qp`
+- ~15x faster than `binascii.b2a_qp`
 - Optional `encode_leading_dot` parameter (default: True) for SMTP compatibility
   - When True: Encodes leading periods on lines (required for SMTP)
   - When False: Passes through leading periods unchanged
 - Uses precompiled lookup tables for performance (initialized at compile time)
-- Scans runs of pass-through characters 16 bytes at a time with SSE2 intrinsics (`#ifdef __SSE2__`, present on all x86-64; scalar lookup-table fallback for other architectures)
+- Scans runs of pass-through characters 16 bytes at a time with SSE2 intrinsics (`#ifdef __SSE2__`, present on all x86-64; scalar lookup-table fallback for other architectures), storing each 16-byte block to the output as it is classified rather than doing a separate memcpy
+- Spaces and tabs are ordinary run characters; only a trailing one before CRLF or end of input is backed off and encoded
+- The output buffer starts at 2x the input and is grown on demand; the hot loop checks for room once per iteration with a 128-byte margin (`OUTPUT_SLACK`) that covers a full 72-char run, a 16-byte vector store overshoot and a soft line break
+- The result is truncated with `Py_SET_SIZE` rather than shrunk with realloc on purpose: freeing a block the same size as was allocated lets glibc raise its mmap threshold, so repeated large calls are served from the heap. Shrinking first made every call mmap/mremap/munmap and page-fault, which cost more than half the runtime
 - Properly handles CRLF line endings (designed for text mode operation)
 
 **swapcase**
@@ -90,17 +93,28 @@ The `data/` directory contains various text files used for testing and benchmark
 ### Performance Notes
 - Module trades memory for speed through precomputed lookup tables
 - Benchmarks show significant performance improvements over standard library equivalents:
-  - b2a_qp: ~5x faster than binascii.b2a_qp (~2,450 vs ~460 ops/sec on the corpus, June 2026)
+  - b2a_qp: ~15x faster than binascii.b2a_qp (~4,300 vs ~285 ops/sec on the corpus pinned to one core, September 2026)
   - swapcase: ~10x faster than Python's builtin
 - Benchmark results are measured in operations per second across a 472KB corpus
 - Run benchmarks with: `PYTHONPATH=. python3 bin/bench.py` (or `bin/bench_zoom.py` for low-noise comparisons)
 
-### Optimization History (June 2026)
-What got b2a_qp from ~3x to ~5x faster than binascii (~1,630 to ~2,450 ops/sec):
+### Optimization History
+
+**September 2026** - loop restructure, ~2.4x on the corpus (~1,900 to ~4,500 ops/sec pinned to one core; HTML files 2.5-3.2x, lorem files unchanged since they were already run-bound):
+- Let spaces and tabs *start* a run, not just continue one. Before, every leading indentation space in the HTML corpus took its own outer-loop iteration through the space/tab branch. The back-off now handles a run that is a single space by dropping to the encode path
+- Store the 16 input bytes to the output inside the SSE2 scan loop instead of a separate variable-length memcpy after the scan (the stores past the run end are harmless with the output slack)
+- Replace the per-byte `j+3 > output_len` check and the three `max_x` clamps with one `j + OUTPUT_SLACK > output_len` check per iteration
+- Encode consecutive non-plain bytes (multi-byte UTF-8) in a tight inner loop instead of one outer iteration each
+- `qp_table` entries are 4 bytes so an escape is a single 32-bit store
+- Output is byte-for-byte identical to the previous version (checked over the corpus plus 3,200 random/edge inputs)
+- Also fixed: a failed `_PyBytes_Resize` was followed by `Py_DECREF(ret)` on a pointer the resize had already nulled, and the result was not NUL-terminated
+
+**June 2026** - what got b2a_qp from ~3x to ~5x faster than binascii (~1,630 to ~2,450 ops/sec):
 - Replaced the `NEEDS_ENCODE` comparison chain and per-character space special-case in the run scan with a 256-byte `qp_plain` lookup table; spaces/tabs join runs with a one-char back-off before CR or end of input (+16%)
 - SSE2 vectorized run scanning, 16 bytes per compare via movemask/ctz (+30% more)
 
 Tried and rejected - don't re-attempt these without new evidence:
+- **Allocating the worst-case output (3.1x) up front and shrinking with `_PyBytes_Resize` at the end**: removes the per-iteration room check but the shrink-then-free pattern keeps glibc's mmap threshold low, so every call on a >128KB input pays mmap + mremap + munmap + page faults: 56% of runtime in the kernel, ~40% slower than growing a 2x buffer and truncating with `Py_SET_SIZE`.
 - **Compiler flags** (`-O3`, `-march=native`): ~1% change, within benchmark noise. The hot loop is branch-bound, not helped by auto-vectorization.
 - **AVX2 32-bytes-per-iteration scan**: ~12% *slower* than SSE2 (~2,150 vs ~2,450 ops/sec). Runs of plain characters are too short to amortize the wider vectors - lines are capped at 72 chars and the HTML corpus is full of `=` characters (attribute syntax) that terminate runs early.
 - **Compiling the SSE2 code with `-mavx2`**: +5% from VEX encoding, but not portable in a distributed package without runtime CPU dispatch; not worth the packaging complexity.
