@@ -78,6 +78,11 @@ The `data/` directory contains various text files used for testing and benchmark
 - Run with: `PYTHONPATH=. python3 bin/bench_zoom.py`
 - Reports best-of-10 ops/sec - prefer this over single bench.py runs when comparing optimizations, since single runs can vary by ±20% with machine load
 
+**bin/bench_chart.py** - Regenerates the README benchmark chart
+- Run with: `python3 bin/bench_chart.py ZOOM BINASCII QUOPRI` using the three ops/sec numbers from `bin/bench.py` (best of a few pinned runs)
+- Writes `docs/benchmarks/b2a_qp.svg` and `b2a_qp-dark.svg`; README.md selects between them with a `<picture>` element for the viewer's theme
+- Rerun it whenever the benchmark numbers in the README change
+
 **bin/verify_correct.py** - Correctness harness for `b2a_qp`
 - Run with: `PYTHONPATH=. python3 bin/verify_correct.py`
 - Round-trips the corpus, ~35 edge cases, and 400 random inputs through `binascii.a2b_qp`
