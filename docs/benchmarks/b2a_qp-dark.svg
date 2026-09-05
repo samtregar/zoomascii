@@ -1,31 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img" aria-labelledby="t d">
 <title id="t">b2a_qp throughput</title>
-<desc id="d">zoomascii.b2a_qp 4,310 per second; binascii.b2a_qp 299 per second; quopri (pure Python) 6.3 per second</desc>
+<desc id="d">zoomascii.b2a_qp 9,619 per second; binascii.b2a_qp 471 per second; quopri (pure Python) 9.8 per second</desc>
 <rect width="720" height="250" fill="#1a1a19"/>
 <g font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
 <text x="24" y="32" font-size="16" font-weight="600" fill="#ffffff">Quoted-printable encoding speed</text>
 <text x="24" y="52" font-size="12" fill="#c3c2b7">bin/bench.py on the 472 KB corpus in data/ · Python 3.11, one core · September 2026</text>
 <line x1="200.0" y1="72" x2="200.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
 <text x="200.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="239.0" y1="72" x2="239.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
+<text x="239.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">1,000</text>
 <line x1="278.0" y1="72" x2="278.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
-<text x="278.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">1,000</text>
+<text x="278.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">2,000</text>
+<line x1="317.0" y1="72" x2="317.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
+<text x="317.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">3,000</text>
 <line x1="356.0" y1="72" x2="356.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
-<text x="356.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">2,000</text>
+<text x="356.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">4,000</text>
+<line x1="395.0" y1="72" x2="395.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
+<text x="395.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">5,000</text>
 <line x1="434.0" y1="72" x2="434.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
-<text x="434.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">3,000</text>
+<text x="434.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">6,000</text>
+<line x1="473.0" y1="72" x2="473.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
+<text x="473.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">7,000</text>
 <line x1="512.0" y1="72" x2="512.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
-<text x="512.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">4,000</text>
+<text x="512.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">8,000</text>
+<line x1="551.0" y1="72" x2="551.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
+<text x="551.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">9,000</text>
 <line x1="590.0" y1="72" x2="590.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
-<text x="590.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">5,000</text>
+<text x="590.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">10,000</text>
 <text x="395.0" y="232" font-size="11" text-anchor="middle" fill="#898781">encodes per second (higher is better)</text>
 <line x1="200" y1="72" x2="200" y2="198" stroke="#383835" stroke-width="1"/>
-<path d="M200.0,87.0 h332.2 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-332.2 z" fill="#3987e5"/>
+<path d="M200.0,87.0 h371.1 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-371.1 z" fill="#3987e5"/>
 <text x="188" y="102.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="600">zoomascii.b2a_qp</text>
-<text x="544.2" y="102.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">4,310 /s</text>
-<path d="M200.0,127.0 h19.3 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-19.3 z" fill="#4a4a47"/>
+<text x="583.1" y="102.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">9,619 /s</text>
+<path d="M200.0,127.0 h14.4 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-14.4 z" fill="#4a4a47"/>
 <text x="188" y="142.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="400">binascii.b2a_qp</text>
-<text x="231.3" y="142.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">299 /s  (14x slower)</text>
+<text x="226.4" y="142.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">471 /s  (20x slower)</text>
 <rect x="200" y="167.0" width="1.00" height="22" fill="#4a4a47"/>
 <text x="188" y="182.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="400">quopri (pure Python)</text>
-<text x="208.5" y="182.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">6.3 /s  (684x slower)</text>
+<text x="208.4" y="182.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">9.8 /s  (981x slower)</text>
 </g></svg>

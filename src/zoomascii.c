@@ -131,9 +131,10 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   line_len = 0;
   while (i < input_len) {
     // make sure one more iteration can't run off the end of the
-    // output: a run is at most MAX_LINE_LENGTH bytes, the 16-byte
-    // vector stores below can overshoot the run by up to 16 bytes, and
-    // an =XX escape or soft line break is 3 bytes plus a NUL. Checking
+    // output: a plain run and the escapes following it share the
+    // MAX_LINE_LENGTH budget. The 16-byte vector stores below can
+    // overshoot the run by up to 16 bytes, and an =XX escape or soft
+    // line break is 3 bytes plus a NUL. Checking
     // once per iteration with a generous margin keeps the branch
     // predictable and out of the inner loops.
     if (unlikely(j + OUTPUT_SLACK > output_len)) {
@@ -172,24 +173,25 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       // that's fine because the output buffer has slack and anything
       // past the run gets overwritten by whatever comes next.
       //
-      // the x+16 <= avail bound keeps the loads inside the input
-      // buffer; a tail shorter than 16 bytes falls through to the
-      // scalar loop below, which picks up where x left off.
-      while (x + 16 <= avail) {
+      // Compute the final permitted load position once: each load
+      // must fit in the input and start before the line is full.
+      // This leaves just one bounds check per vector. A tail shorter
+      // than 16 bytes falls through to the scalar loop below.
+      Py_ssize_t vector_limit = avail - 16;
+      if (vector_limit >= room)
+        vector_limit = room - 1;
+      while (x <= vector_limit) {
         __m128i v = _mm_loadu_si128((const __m128i*)(p + x));
         __m128i plain;
         unsigned int mask;
 
         _mm_storeu_si128((__m128i*)(q + x), v);
 
-        // lane-wise compares: each of the 16 bytes is compared
-        // against a register with the constant in every byte
-        // (_mm_set1_epi8), producing 0xFF where true, 0x00 where
-        // false. AND-ing the two range checks gives 32 <= c <= 126.
-        // note the compares are *signed*: bytes 128-255 are negative
-        // so they fail c > 31, which is exactly what we want.
-        plain = _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(31)),
-                              _mm_cmplt_epi8(v, _mm_set1_epi8(127)));
+        // Wrapping addition maps bytes 32..126 to signed -128..-34.
+        // One signed comparison then checks both ends of the ASCII
+        // range; control bytes and bytes >= 127 fail the comparison.
+        plain = _mm_cmplt_epi8(_mm_add_epi8(v, _mm_set1_epi8(96)),
+                               _mm_set1_epi8(-33));
         // andnot(a, b) = (NOT a) AND b - knock '=' back out of the
         // plain set ...
         plain = _mm_andnot_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(61)), plain);
@@ -208,8 +210,6 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
           goto scanned;
         }
         x += 16;
-        if (x >= room)
-          goto scanned;
       }
 #endif
       {
@@ -220,7 +220,9 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         }
       }
 
+#ifdef __SSE2__
     scanned:
+#endif
       // the 16-at-a-time strides can overshoot the line-length limit
       if (x > room)
         x = room;
@@ -241,7 +243,14 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       j += x;
       line_len += x;
 
-    } else if (c == CR && i + 1 < input_len && input[i+1] == LF) {
+      // A run normally ends at a byte needing encoding. Handle it
+      // immediately while there is still room on this line.
+      if (x == room || i == input_len)
+        goto line_break;
+      c = input[i];
+    }
+
+    if (c == CR && i + 1 < input_len && input[i+1] == LF) {
       // CRLF can go as-is and resets the line
       output[j] = CR;
       output[j+1] = LF;
@@ -249,28 +258,27 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       i += 2;
       line_len = 0;
       continue;
-
-    } else {
-    encode:
-      // encode all other chars as =XX. The table entries are 4 bytes
-      // (with a NUL) so this is a single 32-bit store; the extra byte
-      // is overwritten by the next output. Keep going while the
-      // following bytes also need encoding (multi-byte UTF-8 text)
-      // rather than paying the outer loop overhead for each one; the
-      // line-length check below is what bounds the output written.
-      for (;;) {
-        memcpy(output + j, qp_table[c], 4);
-        j += 3;
-        i++;
-        line_len += 3;
-        if (line_len >= MAX_LINE_LENGTH || i >= input_len)
-          break;
-        c = input[i];
-        if (qp_plain[c] || c == CR)
-          break;
-      }
+    }
+  encode:
+    // encode all other chars as =XX. The table entries are 4 bytes
+    // (with a NUL) so this is a single 32-bit store; the extra byte
+    // is overwritten by the next output. Keep going while the
+    // following bytes also need encoding (multi-byte UTF-8 text)
+    // rather than paying the outer loop overhead for each one; the
+    // line-length check below is what bounds the output written.
+    for (;;) {
+      memcpy(output + j, qp_table[c], 4);
+      j += 3;
+      i++;
+      line_len += 3;
+      if (line_len >= MAX_LINE_LENGTH || i >= input_len)
+        break;
+      c = input[i];
+      if (qp_plain[c] || c == CR)
+        break;
     }
 
+  line_break:
     // soft line break at max
     if (unlikely(line_len >= MAX_LINE_LENGTH)) {
       memcpy(output + j, "=\r\n", 4);

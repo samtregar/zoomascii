@@ -12,7 +12,77 @@ for fname in listdir(data_dir):
         corpus.append(data)
 
 
+def reference_qp(data, encode_leading_dot):
+    """Encode one byte at a time, preserving zoomascii's line wrapping."""
+    result = []
+    values = bytearray(data)
+    line_len = 0
+    i = 0
+    while i < len(data):
+        if data[i:i + 2] == b'\r\n':
+            result.append(b'\r\n')
+            line_len = 0
+            i += 2
+            continue
+        c = values[i]
+        plain = c == 9 or (32 <= c <= 126 and c != 61)
+        if c in (9, 32) and (i + 1 == len(data) or
+                             data[i + 1:i + 3] == b'\r\n'):
+            plain = False
+        if c == 46 and line_len == 0 and encode_leading_dot:
+            plain = False
+        piece = data[i:i + 1]
+        if not plain:
+            piece = b'=' + binascii.hexlify(piece).upper()
+        result.append(piece)
+        line_len += len(piece)
+        i += 1
+        if line_len >= 72:
+            result.append(b'=\r\n')
+            line_len = 0
+    return b''.join(result)
+
+
 class BasicTests(unittest.TestCase):
+    def assert_qp_matches_reference(self, data):
+        for dots in (False, True):
+            self.assertEqual(zoomascii.b2a_qp(data, dots),
+                             reference_qp(data, dots))
+
+    def test_qp_vector_lanes(self):
+        # Every byte value in every SIMD lane, with both a short tail
+        # and enough following input for additional vector loads.
+        for offset in range(16):
+            for value in range(256):
+                for tail in (b'', b'z' * 80):
+                    data = b'a' * offset + bytes(bytearray([value])) + tail
+                    self.assert_qp_matches_reference(data)
+
+    def test_qp_run_boundaries(self):
+        # Runs ending at escapes, whitespace, CRLF, and soft line breaks.
+        tails = (b'=', b'===', b'\xc3\xa9\xe2\x82\xac', b'\r', b'\n',
+                 b'\r\n', b' \r\n', b'\t\r\n', b'  ', b'\t', b'.')
+        for offset in range(65, 81):
+            for tail in tails:
+                self.assert_qp_matches_reference(b'a' * offset + tail)
+                self.assert_qp_matches_reference(
+                    b'a' * offset + tail + b'.next\r\n. ')
+
+    def test_qp_output_growth(self):
+        for length in (1365, 2048, 4095, 4096, 4097, 65536):
+            self.assert_qp_matches_reference(b'=' * length)
+
+    def test_qp_releases_input_buffer(self):
+        for data in (b'', b'short', b'a=\r\n' * 1000):
+            value = bytearray(data)
+            self.assertEqual(zoomascii.b2a_qp(value), reference_qp(data, True))
+            value.extend(b'x')  # Fails if the encoder still holds a buffer.
+            value = bytearray(data)
+            view = memoryview(value)
+            self.assertEqual(zoomascii.b2a_qp(view), reference_qp(data, True))
+            del view
+            value.extend(b'x')
+
     def test_qp_basic(self):
         self.assertEqual(zoomascii.b2a_qp("dude"), b'dude')
         self.assertEqual(zoomascii.b2a_qp("dude\t\r\n"), b"dude=09\r\n")

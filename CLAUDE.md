@@ -77,6 +77,7 @@ The `data/` directory contains various text files used for testing and benchmark
 **bin/bench_zoom.py** - Tight benchmark of `b2a_qp` only
 - Run with: `PYTHONPATH=. python3 bin/bench_zoom.py`
 - Reports best-of-10 ops/sec - prefer this over single bench.py runs when comparing optimizations, since single runs can vary by ±20% with machine load
+- `--baseline DIRECTORY` loads a saved extension build in the same interpreter, verifies identical corpus output for both leading-dot settings, and alternates timing samples; `--per-file` adds individual input results. Save the baseline before editing with `python3 setup.py build_ext --force --build-lib DIRECTORY`, then rebuild the current extension in place.
 
 **bin/bench_chart.py** - Regenerates the README benchmark chart
 - Run with: `python3 bin/bench_chart.py ZOOM BINASCII QUOPRI` using the three ops/sec numbers from `bin/bench.py` (best of a few pinned runs)
@@ -98,12 +99,20 @@ The `data/` directory contains various text files used for testing and benchmark
 ### Performance Notes
 - Module trades memory for speed through precomputed lookup tables
 - Benchmarks show significant performance improvements over standard library equivalents:
-  - b2a_qp: ~15x faster than binascii.b2a_qp (~4,300 vs ~285 ops/sec on the corpus pinned to one core, September 2026)
+  - b2a_qp: ~20x faster than binascii.b2a_qp (9,618.74 vs 470.87 ops/sec; pure-Python quopri 9.81 ops/sec; best of three bin/bench.py runs pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, September 5, 2026)
   - swapcase: ~10x faster than Python's builtin
 - Benchmark results are measured in operations per second across a 472KB corpus
 - Run benchmarks with: `PYTHONPATH=. python3 bin/bench.py` (or `bin/bench_zoom.py` for low-noise comparisons)
 
 ### Optimization History
+
+**September 2026** - SIMD bounds and escape handling, ~1.33x on the raw corpus versus b59e211 (6,067 to 8,072 ops/sec, median of 11 alternating 2,000-run samples pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, GCC 13.2):
+- Compute the final legal 16-byte load position once per plain run, combining input and line limits into one inner-loop bounds check
+- Check the printable ASCII range with wrapping addition and one signed SIMD comparison, still excluding `=` and including tab
+- Handle an escape or CRLF immediately after copying the preceding plain run, avoiding another outer-loop iteration
+- Preserve exact output, the SSE2 requirement, the portable scalar fallback, and allocation behavior
+- Verified against the original and scalar builds over 20,000 randomized comparisons, plus all byte values in each SIMD lane, line boundaries, and buffer growth; Valgrind reports no memory errors. The unchanged repository fuzzer also passed all 100,000 cases, including binary inputs up to 1 MB.
+- The README chart uses fresh best-of-three runs of the separate bin/bench.py benchmark, which normalizes line endings; these before/after measurements preserve the raw input
 
 **September 2026** - loop restructure, ~2.4x on the corpus (~1,900 to ~4,500 ops/sec pinned to one core; HTML files 2.5-3.2x, lorem files unchanged since they were already run-bound):
 - Let spaces and tabs *start* a run, not just continue one. Before, every leading indentation space in the HTML corpus took its own outer-loop iteration through the space/tab branch. The back-off now handles a run that is a single space by dropping to the encode path
