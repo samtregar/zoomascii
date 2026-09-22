@@ -88,8 +88,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+      # This Python's build replaces its default compiler flags with
+      # $CFLAGS instead of adding to them, so ask for optimization too.
       - name: Build with SSE2 disabled
-        run: CFLAGS=-U__SSE2__ python -m pip install -v .
+        run: CFLAGS="-O2 -U__SSE2__" python -m pip install -v .
       - name: Check the build has no SSE2 code
         working-directory: ${{ runner.temp }}
         run: |
