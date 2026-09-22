@@ -24,6 +24,14 @@ This module supports both Python 2.7 and Python 3.5+, with compatibility handled
 - `python3 setup.py bdist_wheel` - Create wheel distribution
 - `python3 setup.py clean` - Clean build artifacts
 
+### Continuous Integration
+`.github/workflows/wheels.yml` runs on pushes to master, `v*` tags, pull requests, and manual dispatch:
+- **wheels**: cibuildwheel (pinned) builds and tests wheels on native GitHub runners for Linux x86-64/i686 and ARM64, Windows x64/x86/ARM64, and macOS ARM64/Intel, plus Linux s390x (big-endian) under QEMU for one Python version, since emulation is slow. Each wheel is tested with `tests/basic.py` and `bin/verify_correct.py` from a temp directory. Free-threaded builds (`cp3??t`) are skipped because the module doesn't declare GIL-free support
+- The SSE2 path is compiled on Linux x86-64 and macOS Intel; ARM, s390x, and Windows (MSVC never defines `__SSE2__`) use the portable SWAR path
+- **portable**: builds with `CFLAGS=-U__SSE2__` on Linux, fails if any `pmovmskb` instruction is present, and runs the tests
+- **sdist**: builds the source distribution, then installs and tests it
+- Wheels and sdist are uploaded as workflow artifacts; nothing publishes to PyPI yet
+
 ## Architecture Overview
 
 This is a Python C extension module that provides faster implementations of ASCII string processing functions, optimized for speed over memory usage.

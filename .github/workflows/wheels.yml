@@ -1,0 +1,128 @@
+name: Build and test
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Free-threaded CPython (cp314t etc.) would need the module to declare
+  # it doesn't rely on the GIL, which it doesn't do yet.
+  CIBW_SKIP: "cp3??t-*"
+  # Tests run from a temporary directory against the installed wheel.
+  CIBW_TEST_COMMAND: >-
+    python -m unittest discover -s {project}/tests -p basic.py &&
+    python {project}/bin/verify_correct.py
+
+jobs:
+  wheels:
+    name: Wheels - ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # SSE2 path (GCC); i686 is 32-bit
+          - name: Linux x86-64 and x86
+            os: ubuntu-latest
+            archs: x86_64 i686
+          # portable path (GCC)
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            archs: aarch64
+          # portable path on a big-endian CPU, emulated with QEMU. The
+          # emulation is slow, so this builds one Python version.
+          - name: Linux s390x (big-endian, emulated)
+            os: ubuntu-latest
+            archs: s390x
+            build: cp314-manylinux_s390x
+          # portable path (MSVC never defines __SSE2__); x86 is 32-bit
+          - name: Windows x64 and x86
+            os: windows-latest
+            archs: AMD64 x86
+          # portable path (MSVC)
+          - name: Windows ARM64
+            os: windows-11-arm
+            archs: ARM64
+          # portable path (clang)
+          - name: macOS ARM64
+            os: macos-latest
+            archs: arm64
+          # SSE2 path (clang)
+          - name: macOS Intel
+            os: macos-15-intel
+            archs: x86_64
+    steps:
+      # keep the test data byte-identical on Windows
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - name: Set up QEMU
+        if: matrix.archs == 's390x'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: s390x
+      - uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: ${{ matrix.build || '*' }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ strategy.job-index }}-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  portable:
+    name: Portable path without SSE2 (Linux x86-64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build with SSE2 disabled
+        run: CFLAGS=-U__SSE2__ python -m pip install -v .
+      - name: Check the build has no SSE2 code
+        working-directory: ${{ runner.temp }}
+        run: |
+          so=$(python -c "import zoomascii; print(zoomascii.__file__)")
+          if objdump -d "$so" | grep -q pmovmskb; then
+            echo "::error::found SSE2 instructions in $so"
+            exit 1
+          fi
+      - name: Test
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p basic.py
+          python "$GITHUB_WORKSPACE/bin/verify_correct.py"
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build --sdist
+      - name: Install and test
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m pip install "$GITHUB_WORKSPACE"/dist/*.tar.gz
+          python -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p basic.py
+          python "$GITHUB_WORKSPACE/bin/verify_correct.py"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
