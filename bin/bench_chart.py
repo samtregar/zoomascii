@@ -35,11 +35,23 @@ def fmt(v):
     return ('%.1f' % v) if v < 10 else ('{:,}'.format(int(round(v))))
 
 
+def tick_step(top_value, max_intervals=6):
+    """Round 1, 2 or 5 times a power of ten, so labels like "10,000"
+    stay well apart however large the fastest encoder gets."""
+    magnitude = 1
+    while magnitude * 10 <= top_value / max_intervals:
+        magnitude *= 10
+    for multiple in (1, 2, 5, 10):
+        if multiple * magnitude * max_intervals >= top_value:
+            return multiple * magnitude
+
+
 def render(theme, rows, subtitle):
     t = THEMES[theme]
     top_value = max(v for _, v, _ in rows)
-    # clean axis maximum: next 1,000 above the largest bar
-    axis_max = (int(top_value // 1000) + 1) * 1000
+    step = tick_step(top_value)
+    # clean axis maximum: next tick above the largest bar
+    axis_max = (int(top_value // step) + 1) * step
     plot_w = W - LEFT - RIGHT
     x0 = LEFT
     baseline_y = TOP + SLOT * len(rows)
@@ -61,7 +73,7 @@ def render(theme, rows, subtitle):
                % (t['ink2'], subtitle))
 
     # hairline gridlines and axis ticks
-    for tick in range(0, axis_max + 1, 1000):
+    for tick in range(0, axis_max + 1, step):
         gx = x(tick)
         out.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="%s" stroke-width="1"/>'
                    % (gx, TOP - 6, gx, baseline_y, t['grid']))
