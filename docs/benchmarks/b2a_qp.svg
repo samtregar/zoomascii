@@ -1,41 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img" aria-labelledby="t d">
 <title id="t">b2a_qp throughput</title>
-<desc id="d">zoomascii.b2a_qp 9,619 per second; binascii.b2a_qp 471 per second; quopri (pure Python) 9.8 per second</desc>
+<desc id="d">zoomascii.b2a_qp 16,803 per second; binascii.b2a_qp 425 per second; quopri (pure Python) 9.1 per second</desc>
 <rect width="720" height="250" fill="#fcfcfb"/>
 <g font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
 <text x="24" y="32" font-size="16" font-weight="600" fill="#0b0b0b">Quoted-printable encoding speed</text>
 <text x="24" y="52" font-size="12" fill="#52514e">bin/bench.py on the 472 KB corpus in data/ · Python 3.11, one core · September 2026</text>
 <line x1="200.0" y1="72" x2="200.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
 <text x="200.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="239.0" y1="72" x2="239.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="239.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">1,000</text>
-<line x1="278.0" y1="72" x2="278.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="278.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">2,000</text>
-<line x1="317.0" y1="72" x2="317.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="317.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">3,000</text>
-<line x1="356.0" y1="72" x2="356.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="356.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">4,000</text>
-<line x1="395.0" y1="72" x2="395.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="395.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">5,000</text>
-<line x1="434.0" y1="72" x2="434.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="434.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">6,000</text>
-<line x1="473.0" y1="72" x2="473.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="473.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">7,000</text>
-<line x1="512.0" y1="72" x2="512.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="512.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">8,000</text>
-<line x1="551.0" y1="72" x2="551.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="551.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">9,000</text>
+<line x1="222.9" y1="72" x2="222.9" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="222.9" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">1,000</text>
+<line x1="245.9" y1="72" x2="245.9" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="245.9" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">2,000</text>
+<line x1="268.8" y1="72" x2="268.8" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="268.8" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">3,000</text>
+<line x1="291.8" y1="72" x2="291.8" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="291.8" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">4,000</text>
+<line x1="314.7" y1="72" x2="314.7" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="314.7" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">5,000</text>
+<line x1="337.6" y1="72" x2="337.6" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="337.6" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">6,000</text>
+<line x1="360.6" y1="72" x2="360.6" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="360.6" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">7,000</text>
+<line x1="383.5" y1="72" x2="383.5" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="383.5" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">8,000</text>
+<line x1="406.5" y1="72" x2="406.5" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="406.5" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">9,000</text>
+<line x1="429.4" y1="72" x2="429.4" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="429.4" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">10,000</text>
+<line x1="452.4" y1="72" x2="452.4" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="452.4" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">11,000</text>
+<line x1="475.3" y1="72" x2="475.3" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="475.3" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">12,000</text>
+<line x1="498.2" y1="72" x2="498.2" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="498.2" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">13,000</text>
+<line x1="521.2" y1="72" x2="521.2" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="521.2" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">14,000</text>
+<line x1="544.1" y1="72" x2="544.1" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="544.1" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">15,000</text>
+<line x1="567.1" y1="72" x2="567.1" y2="198" stroke="#e1e0d9" stroke-width="1"/>
+<text x="567.1" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">16,000</text>
 <line x1="590.0" y1="72" x2="590.0" y2="198" stroke="#e1e0d9" stroke-width="1"/>
-<text x="590.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">10,000</text>
+<text x="590.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">17,000</text>
 <text x="395.0" y="232" font-size="11" text-anchor="middle" fill="#898781">encodes per second (higher is better)</text>
 <line x1="200" y1="72" x2="200" y2="198" stroke="#c3c2b7" stroke-width="1"/>
-<path d="M200.0,87.0 h371.1 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-371.1 z" fill="#2a78d6"/>
+<path d="M200.0,87.0 h381.5 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-381.5 z" fill="#2a78d6"/>
 <text x="188" y="102.5" font-size="13" text-anchor="end" fill="#0b0b0b" font-weight="600">zoomascii.b2a_qp</text>
-<text x="583.1" y="102.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">9,619 /s</text>
-<path d="M200.0,127.0 h14.4 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-14.4 z" fill="#c3c2b7"/>
+<text x="593.5" y="102.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">16,803 /s</text>
+<path d="M200.0,127.0 h5.8 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-5.8 z" fill="#c3c2b7"/>
 <text x="188" y="142.5" font-size="13" text-anchor="end" fill="#0b0b0b" font-weight="400">binascii.b2a_qp</text>
-<text x="226.4" y="142.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">471 /s  (20x slower)</text>
+<text x="217.8" y="142.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">425 /s  (40x slower)</text>
 <rect x="200" y="167.0" width="1.00" height="22" fill="#c3c2b7"/>
 <text x="188" y="182.5" font-size="13" text-anchor="end" fill="#0b0b0b" font-weight="400">quopri (pure Python)</text>
-<text x="208.4" y="182.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">9.8 /s  (981x slower)</text>
+<text x="208.2" y="182.0" font-size="12" fill="#52514e" style="font-variant-numeric: tabular-nums">9.1 /s  (1840x slower)</text>
 </g></svg>

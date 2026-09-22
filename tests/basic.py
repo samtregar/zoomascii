@@ -1,3 +1,4 @@
+import random
 import unittest
 import zoomascii
 import binascii
@@ -67,6 +68,38 @@ class BasicTests(unittest.TestCase):
                 self.assert_qp_matches_reference(b'a' * offset + tail)
                 self.assert_qp_matches_reference(
                     b'a' * offset + tail + b'.next\r\n. ')
+
+    def test_qp_block_edges(self):
+        # The encoder works in 64-byte blocks and carries plain runs,
+        # escape runs and CRLFs across block edges. Slide each piece
+        # past every block and line position.
+        pieces = (b' \r\n.', b'\t\r\n', b'\r\n', b'\r\r\n', b' ',
+                  b'\xc3\xa9' * 30, b'=' * 25 + b'.')
+        for offset in range(200):
+            for piece in pieces:
+                self.assert_qp_matches_reference(
+                    b'a' * offset + piece + b'b.' * (offset % 5))
+
+    def test_qp_input_lengths(self):
+        # The end of the input is encoded from a padded copy. Check
+        # every length through several blocks, ending in each kind of
+        # character.
+        for length in range(1, 300):
+            for last in (b'a', b' ', b'\t', b'=', b'\r', b'.', b'\xff'):
+                for fill in (b'a' * 300, b'abc=\r\n' * 50):
+                    data = fill[:length - 1] + last
+                    self.assert_qp_matches_reference(data)
+
+    def test_qp_random_structure(self):
+        # Random mixes of the pieces that change the encoder's state.
+        rng = random.Random(2026)
+        pieces = (b'a', b'b' * 15, b'c' * 40, b'd' * 71, b' ', b'\t', b'=',
+                  b'.', b'\r\n', b'\r', b'\n', b' \r\n', b'\xc3\xa9',
+                  b'\xe2\x82\xac' * 4, b'\x00\xff')
+        for trial in range(1000):
+            data = b''.join(rng.choice(pieces)
+                            for _ in range(rng.randint(1, 40)))
+            self.assert_qp_matches_reference(data)
 
     def test_qp_output_growth(self):
         for length in (1365, 2048, 4095, 4096, 4097, 65536):
