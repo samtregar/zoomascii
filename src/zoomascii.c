@@ -88,8 +88,9 @@ static Py_ssize_t roundUp4k(Py_ssize_t numToRound) {
 #define BLOCK 64
 
 // A plain run is always shorter than a line, which is up to 72 input
-// bytes. Copying a run is a fixed 80-byte copy, so it never needs a
-// loop whose length depends on the data.
+// bytes. A run that fills a line is copied in one 80-byte chunk; runs
+// ending at an escape or CRLF are usually short, so they copy 32 bytes
+// first and the remaining 48 only when needed.
 #define COPY 80
 
 // Reads relative to the block start reach back to the start of a plain
@@ -108,7 +109,7 @@ static Py_ssize_t roundUp4k(Py_ssize_t numToRound) {
 #define OUTPUT_SLACK 512
 
 #if defined(__GNUC__) || defined(__clang__)
-#define ctz64(x) __builtin_ctzll(x)
+#define ctz64(x) ((unsigned int)__builtin_ctzll(x))
 #elif defined(_MSC_VER) && defined(_M_X64)
 #include <intrin.h>
 static __inline int ctz64(uint64_t x) {
@@ -163,10 +164,10 @@ static inline uint64_t escape_mask8(const unsigned char *p) {
   uint64_t not61 = (low ^ 0x3D * ones) + ~high;    // anything but '='
   uint64_t not9 = (low ^ 0x09 * ones) + ~high;     // anything but tab
   // and bytes >= 128 are never plain
-  uint64_t plain = ((from32 & ~is127 & not61) | ~not9) & ~w & high;
+  uint64_t plain = ((from32 & ~is127 & not61) | ~not9) & ~w;
   // the top bits are at 8n + 7. The multiply moves bit 8n to 56 + n
   // without any of the partial products overlapping.
-  return (((plain ^ high) >> 7) * 0x0102040810204080ULL) >> 56;
+  return (((~plain & high) >> 7) * 0x0102040810204080ULL) >> 56;
 }
 #endif
 
@@ -195,8 +196,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   char *output, *output_limit, *obase;
   Py_ssize_t input_len, output_len, j, b, b_limit, cur, line_end, e;
   uint64_t mask;
-  int dot;
-  unsigned char c;
+  unsigned int dot, c;
   // the end of the input gets copied here, so the block code can always
   // read HISTORY bytes before a block and BLOCK_READ from its start.
   // The padding is CRs, which need encoding - that stops plain runs at
@@ -268,16 +268,19 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 // all of it with padding first is a fixed-size memset the compiler can
 // inline, which is quicker than working out how much padding is needed.
 #define USE_TAIL() do {                                         \
-    Py_ssize_t history = b < HISTORY ? b : HISTORY;             \
+    Py_ssize_t pos = input_len + b;                             \
+    Py_ssize_t history = pos < HISTORY ? pos : HISTORY;         \
+    tail[HISTORY - 1] = 0;                                      \
     memset(tail + HISTORY, CR, sizeof(tail) - HISTORY);         \
-    memcpy(tail + HISTORY - history, input + b - history,       \
-           history + input_len - b);                            \
+    memcpy(tail + HISTORY - history, base - history,            \
+           history - b);                                        \
     base = tail + HISTORY;                                      \
     b_limit = PY_SSIZE_T_MAX;                                   \
   } while (0)
 
-  // Positions are relative to the current block, which starts at input
-  // offset b. cur is the next input byte to encode. It can be negative
+  // Positions are relative to the current block, which starts at
+  // base; b counts up from -input_len so b + e == 0 at the end of the
+  // input. cur is the next input byte to encode. It can be negative
   // when a plain run carries over from the previous block, and it moves
   // past BLOCK when something reads into the next block. obase + k is
   // where input byte k goes in the output if it passes through, so a
@@ -285,20 +288,27 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   // and each soft line break by 3. line_end is the input position where
   // the current line fills up if everything up to there passes through,
   // so each escape pulls it in by 2.
-  b = 0;
-  b_limit = input_len - BLOCK_READ;
+  b = -input_len;
+  b_limit = -BLOCK_READ;
   base = input;
   if (b > b_limit)
     USE_TAIL();
   obase = output;
   cur = 0;
   line_end = MAX_LINE_LENGTH;
+  if (unlikely(base[0] == CR && base[1] == LF)) {
+    obase[0] = CR;
+    obase[1] = LF;
+    cur = 2;
+    line_end = 2 + MAX_LINE_LENGTH;
+  }
   LEADING_DOT();
   mask = escape_mask(base) & (~(uint64_t)0 << cur);
 
   for (;;) {
     if (mask == 0) {
       if (line_end > BLOCK) {
+      next_block:
         // nothing left to encode in this block - move on to the next.
         // Any plain run so far just carries over.
         b += BLOCK;
@@ -329,20 +339,25 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
       }
       e = BLOCK;
     } else {
+    next_escape:
       e = ctz64(mask);
+    }
+
+    if (unlikely(e >= line_end)) {
+      // the line fills up inside the run
+      memcpy(obase + cur, base + cur, COPY);
+      cur = line_end;
+      SOFT_BREAK(cur);
+      LEADING_DOT();
+      if (mask == 0)
+        goto next_block;
     }
 
     // copy the plain run up to the next byte that needs encoding.
     // Anything past the run gets overwritten by whatever comes next.
-    memcpy(obase + cur, base + cur, COPY);
-
-    if (unlikely(e >= line_end)) {
-      // the line fills up inside the run
-      cur = line_end;
-      SOFT_BREAK(cur);
-      LEADING_DOT();
-      continue;
-    }
+    memcpy(obase + cur, base + cur, 32);
+    if (unlikely(e - cur > 32))
+      memcpy(obase + cur + 32, base + cur + 32, 48);
     cur = e;
 
     c = base[e];
@@ -353,7 +368,7 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         // through as part of a plain run. Replace it. If it filled its
         // line, the soft line break after it is still needed after the
         // longer encoded form.
-        if (b + e > 0 && (base[e-1] == ' ' || base[e-1] == '\t')) {
+        if (unlikely(base[e-1] == ' ' || base[e-1] == '\t')) {
           c = base[e-1];
           if (line_end - e == MAX_LINE_LENGTH) {
             memcpy(obase + e - 4, qp_table[c], 4);
@@ -369,27 +384,32 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         }
         obase[e] = CR;
         obase[e+1] = LF;
-        mask &= ~((uint64_t)3 << e);
+        mask &= mask - 1;
+        mask &= mask - 1;
         cur = e + 2;
         line_end = cur + MAX_LINE_LENGTH;
         LEADING_DOT();
-        continue;
+        if (mask)
+          goto next_escape;
+        goto next_block;
       }
       // the tail padding is CRs, so this is where the input ends
-      if (b + e >= input_len)
+      if (b + e >= 0)
         break;
     }
 
-    // encode all other chars as =XX. The table entries are 4 bytes
-    // (with a NUL) so this is a single 32-bit store; the extra byte is
-    // overwritten by the next output.
+    // encode all other chars as =XX. The table entries are 4 bytes so
+    // this is a single 32-bit store; the fourth byte is overwritten by
+    // the next output.
     memcpy(obase + e, qp_table[c], 4);
     obase += 2;
     line_end -= 2;
     cur = e + 1;
-    if (likely(!(mask >> e & 2)) && likely(cur < line_end)) {
+    if (likely(!(mask >> (cur & 63) & 1)) && likely(cur < line_end)) {
       // the common case: a single escape in the middle of a line
       mask &= mask - 1;
+      if (mask)
+        goto next_escape;
       continue;
     }
 
@@ -397,27 +417,42 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
     // (multi-byte UTF-8 text) rather than going back through the mask
     // for each one. This can run past the end of the block, but no
     // further than the end of the line.
-    while (cur < line_end) {
-      c = base[cur];
-      if (qp_plain[c] || c == CR)
-        break;
-      memcpy(obase + cur, qp_table[c], 4);
-      obase += 2;
-      line_end -= 2;
-      cur++;
-    }
-    if (cur >= line_end) {
+    for (;;) {
+      char *out = obase + cur;
+      char *line_out_end = obase + line_end;
+      while (out < line_out_end) {
+        int32_t esc;
+        memcpy(&esc, qp_table[base[cur]], 4);
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        if (esc & 0x80) {
+#else
+        if (esc < 0) {
+#endif
+          obase = out - cur;
+          line_end = line_out_end - obase;
+          goto escapes_done;
+        }
+        memcpy(out, &esc, 4);
+        out += 3;
+        cur++;
+      }
+      obase = out - cur;
       SOFT_BREAK(cur);
       LEADING_DOT();
+      if (cur >= BLOCK)
+        goto next_block;
     }
-    mask = cur < BLOCK ? mask & (~(uint64_t)0 << cur) : 0;
+  escapes_done:
+    if (cur >= BLOCK)
+      goto next_block;
+    mask &= ~(uint64_t)0 << cur;
   }
 #undef LEADING_DOT
 #undef SOFT_BREAK
 #undef USE_TAIL
 
   // a space or tab at the very end also has to be encoded, as at a CRLF
-  c = input[input_len-1];
+  c = base[e-1];
   if (c == ' ' || c == '\t') {
     if (line_end - cur == MAX_LINE_LENGTH) {
       memcpy(obase + cur - 4, qp_table[c], 4);

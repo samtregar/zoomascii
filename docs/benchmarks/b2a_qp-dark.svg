@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img" aria-labelledby="t d">
 <title id="t">b2a_qp throughput</title>
-<desc id="d">zoomascii.b2a_qp 16,803 per second; binascii.b2a_qp 425 per second; quopri (pure Python) 9.1 per second</desc>
+<desc id="d">zoomascii.b2a_qp 19,233 per second; binascii.b2a_qp 445 per second; quopri (pure Python) 9.4 per second</desc>
 <rect width="720" height="250" fill="#1a1a19"/>
 <g font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
 <text x="24" y="32" font-size="16" font-weight="600" fill="#ffffff">Quoted-printable encoding speed</text>
-<text x="24" y="52" font-size="12" fill="#c3c2b7">bin/bench.py on the 472 KB corpus in data/ · Python 3.11, one core · September 2026</text>
+<text x="24" y="52" font-size="12" fill="#c3c2b7">bin/bench.py on the 472 KB corpus in data/ · Python 3.11, one core · October 2026</text>
 <line x1="200.0" y1="72" x2="200.0" y2="198" stroke="#2c2c2a" stroke-width="1"/>
 <text x="200.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">0</text>
 <line x1="297.5" y1="72" x2="297.5" y2="198" stroke="#2c2c2a" stroke-width="1"/>
@@ -17,13 +17,13 @@
 <text x="590.0" y="214" font-size="11" text-anchor="middle" fill="#898781" style="font-variant-numeric: tabular-nums">20,000</text>
 <text x="395.0" y="232" font-size="11" text-anchor="middle" fill="#898781">encodes per second (higher is better)</text>
 <line x1="200" y1="72" x2="200" y2="198" stroke="#383835" stroke-width="1"/>
-<path d="M200.0,87.0 h323.7 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-323.7 z" fill="#3987e5"/>
+<path d="M200.0,87.0 h371.0 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-371.0 z" fill="#3987e5"/>
 <text x="188" y="102.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="600">zoomascii.b2a_qp</text>
-<text x="535.7" y="102.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">16,803 /s</text>
-<path d="M200.0,127.0 h4.3 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-4.3 z" fill="#4a4a47"/>
+<text x="583.0" y="102.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">19,233 /s</text>
+<path d="M200.0,127.0 h4.7 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-4.7 z" fill="#4a4a47"/>
 <text x="188" y="142.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="400">binascii.b2a_qp</text>
-<text x="216.3" y="142.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">425 /s  (40x slower)</text>
+<text x="216.7" y="142.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">445 /s  (43x slower)</text>
 <rect x="200" y="167.0" width="1.00" height="22" fill="#4a4a47"/>
 <text x="188" y="182.5" font-size="13" text-anchor="end" fill="#ffffff" font-weight="400">quopri (pure Python)</text>
-<text x="208.2" y="182.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">9.1 /s  (1840x slower)</text>
+<text x="208.2" y="182.0" font-size="12" fill="#c3c2b7" style="font-variant-numeric: tabular-nums">9.4 /s  (2040x slower)</text>
 </g></svg>

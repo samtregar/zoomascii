@@ -60,14 +60,18 @@ class BasicTests(unittest.TestCase):
                     self.assert_qp_matches_reference(data)
 
     def test_qp_run_boundaries(self):
-        # Runs ending at escapes, whitespace, CRLF, and soft line breaks.
+        # Runs ending at escapes, whitespace, CRLF, and soft line breaks,
+        # around both the 32-byte copy split and the 72-byte line limit.
         tails = (b'=', b'===', b'\xc3\xa9\xe2\x82\xac', b'\r', b'\n',
                  b'\r\n', b' \r\n', b'\t\r\n', b'  ', b'\t', b'.')
-        for offset in range(65, 81):
+        for offset in list(range(28, 37)) + list(range(65, 81)):
             for tail in tails:
                 self.assert_qp_matches_reference(b'a' * offset + tail)
                 self.assert_qp_matches_reference(
                     b'a' * offset + tail + b'.next\r\n. ')
+                self.assert_qp_matches_reference(
+                    b'\r\n' + b'.' * (offset % 2) + b'a' * offset + tail +
+                    b'b' * 150)
 
     def test_qp_block_edges(self):
         # The encoder works in 64-byte blocks and carries plain runs,

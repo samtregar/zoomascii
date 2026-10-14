@@ -58,7 +58,7 @@ This is a Python C extension module that provides faster implementations of ASCI
   - When True: Encodes leading periods on lines (required for SMTP)
   - When False: Passes through leading periods unchanged
 - Uses precompiled lookup tables for performance (initialized at compile time)
-- Classifies the input in 64-byte blocks into a bitmask of bytes needing encoding (`escape_mask`: four SSE2 compares + movemask under `#ifdef __SSE2__`, present on all x86-64; other architectures get `escape_mask8`, the same test done 8 bytes at a time with 64-bit SWAR arithmetic), then walks from set bit to set bit with ctz. Each plain run is one fixed 80-byte copy (runs are always shorter than a 72-byte line), each escape one 4-byte `qp_table` store; nothing is rescanned
+- Classifies the input in 64-byte blocks into a bitmask of bytes needing encoding (`escape_mask`: four SSE2 compares + movemask under `#ifdef __SSE2__`, present on all x86-64; other architectures get `escape_mask8`, the same test done 8 bytes at a time with 64-bit SWAR arithmetic), then walks from set bit to set bit with ctz. Plain runs ending at an escape or CRLF copy 32 bytes first and the remaining 48 only when longer than 32 bytes; runs that fill a line copy 80 bytes; each escape is one 4-byte `qp_table` store (whose fourth byte also flags plain/CR bytes to stop multi-escape runs); nothing is rescanned
 - Positions are block-relative and there is no output index: `obase + k` is where input byte k lands if it passes through (escapes add 2, soft breaks 3), and `line_end` is the input position where the line fills (escapes pull it in by 2). A plain run reaching the block end carries over with a negative `cur` rather than being copied twice, so the block reads `HISTORY` bytes back and `BLOCK_READ` forward
 - The last <144 bytes are encoded from a stack copy (`tail`) padded with CRs: padding stops plain runs and escape runs, and the lone-CR path is where the end of input is detected, so the hot loop has no end-of-input check
 - Spaces and tabs are ordinary run characters; one that turns out to precede a CRLF or the end of input has already been copied, so it is rewritten in place as `=20`/`=09` (keeping a soft break that followed it). Leading dots are encoded inline wherever a line starts
@@ -109,12 +109,19 @@ The `data/` directory contains various text files used for testing and benchmark
 ### Performance Notes
 - Module trades memory for speed through precomputed lookup tables
 - Benchmarks show significant performance improvements over standard library equivalents:
-  - b2a_qp: ~40x faster than binascii.b2a_qp (16,803.36 vs 425.21 ops/sec; pure-Python quopri 9.13 ops/sec; best of three bin/bench.py runs pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, September 22, 2026)
+  - b2a_qp: ~43x faster than binascii.b2a_qp (19,233.32 vs 444.53 ops/sec; pure-Python quopri 9.43 ops/sec; best of three bin/bench.py runs pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, October 13, 2026)
   - swapcase: ~10x faster than Python's builtin
 - Benchmark results are measured in operations per second across a 472KB corpus
 - Run benchmarks with: `PYTHONPATH=. python3 bin/bench.py` (or `bin/bench_zoom.py` for low-noise comparisons)
 
 ### Optimization History
+
+**October 13, 2026** - short-run copy split, single-load multi-escape loop, and direct loop transitions, ~1.13x on the raw corpus versus 86dc2e3 (15,484 to 17,519 ops/sec median, 16,845 to 19,338 best across 11 alternating 2,000-run bench_zoom samples pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, GCC 13.2; per file: UTF-8-demo.html 1.36x, nytimes_crlf.html 1.17x, example.html 1.09x, nytimes.html 1.08x, lorem_crfl.txt 1.03x, lorem.txt 1.02x):
+- Plain runs ending at an escape or CRLF (<32 bytes ~84% of the time in HTML, ~98% in UTF-8) copy 32 bytes first and only copy the remaining 48 bytes when `e - cur > 32`; runs that fill a line still copy 80 bytes and fall directly into the post-wrap run without re-running `ctz` when `mask != 0`, or jump straight to `next_block` when `mask == 0`
+- Encode the escape-stop flag (plain chars and CR) in the unused 4th byte of `qp_table` (`0x80`), removing `qp_plain` and the separate `c == CR` branch from the multi-byte escape loop; track `out` against `obase + line_end` (`line_out_end`, invariant across escapes) and stay in the multi-escape loop across soft line breaks while `cur < BLOCK`
+- Test the next mask bit on single escapes with `mask >> (cur & 63) & 1` (compiles to a single `bt` instruction) and jump directly to `next_escape` when `mask` remains non-zero
+- Count `b` up from `-input_len` and handle a leading `CRLF` at byte 0 before the main loop, eliminating `b + e > 0` and `input`/`input_len` from the hot loop and freeing registers
+- Corpus per 2,000 encodes (perf stat): 631M to 542M cycles (-14%), 2.92B to 2.66B instructions, 419M to 393M branches, branch misses -46%
 
 **September 22, 2026** - block bitmask rewrite, ~1.9x on the raw corpus versus 36849b5 (7,606 to 14,560 ops/sec, median of 11 alternating 2,000-run bench_zoom samples pinned to CPU 2, Ryzen 7 PRO 7840U, Python 3.11.6, GCC 13.2; per file: nytimes.html 2.14x, nytimes_crlf.html 1.80x, example.html 1.56x, lorem files 1.14-1.21x, UTF-8-demo.html 1.18x):
 - Classify each 64-byte block once into a 64-bit escape mask and walk it with ctz, instead of starting a fresh SIMD scan at every run (which reclassified bytes and paid per-run setup)
