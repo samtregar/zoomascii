@@ -53,7 +53,7 @@ This is a Python C extension module that provides faster implementations of ASCI
 
 **b2a_qp (Quoted-Printable Encoding)**
 - RFC 2045 compliant implementation
-- ~40x faster than `binascii.b2a_qp`
+- ~43x faster than `binascii.b2a_qp`
 - Optional `encode_leading_dot` parameter (default: True) for SMTP compatibility
   - When True: Encodes leading periods on lines (required for SMTP)
   - When False: Passes through leading periods unchanged
@@ -161,5 +161,5 @@ Tried and rejected - don't re-attempt these without new evidence:
 - **AVX2 32-bytes-per-iteration scan**: ~12% *slower* than SSE2 (~2,150 vs ~2,450 ops/sec). Runs of plain characters are too short to amortize the wider vectors - lines are capped at 72 chars and the HTML corpus is full of `=` characters (attribute syntax) that terminate runs early.
 - **Compiling the SSE2 code with `-mavx2`**: +5% from VEX encoding, but not portable in a distributed package without runtime CPU dispatch; not worth the packaging complexity.
 - **AVX2 in the block design** (32-byte classification plus ymm copies, whole module built with `-mavx2`, September 2026): ~3% fewer cycles on nytimes.html and ~10% *more* on UTF-8-demo.html. Still not worth runtime dispatch.
-- **Counted loop for runs of escapes** (length from the mask, capped by a divide-by-3 line fit): fewer instructions on UTF-8 text, but the corpus came out 1.3% slower (HTML files ~5% slower). The loop that checks `qp_plain` per byte stays.
+- **Counted loop for runs of escapes** (length from the mask, capped by a divide-by-3 line fit): fewer instructions on UTF-8 text, but the corpus came out 1.3% slower (HTML files ~5% slower). The loop that checks a stop flag per byte stays (now the high bit of `qp_table`'s fourth byte, which replaced `qp_plain`).
 - **Benchmark caveat**: the corpus repeats, so the branch predictor learns it (~200 mispredicts per nytimes.html encode). Branchy variants therefore look better here than on fresh email bodies; when results tie, prefer fixed-size, branch-free work.

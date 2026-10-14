@@ -367,7 +367,11 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
         // before it has to be encoded, but it has already been copied
         // through as part of a plain run. Replace it. If it filled its
         // line, the soft line break after it is still needed after the
-        // longer encoded form.
+        // longer encoded form. base[e-1] is always readable: in later
+        // blocks it is in HISTORY, and a CRLF at input byte 0 is
+        // consumed before the loop, so e == 0 never reaches this in
+        // the first block. Without that special case, base[-1] would
+        // read before the input on inputs of BLOCK_READ bytes or more.
         if (unlikely(base[e-1] == ' ' || base[e-1] == '\t')) {
           c = base[e-1];
           if (line_end - e == MAX_LINE_LENGTH) {
@@ -415,19 +419,21 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     // Keep going while the following bytes also need encoding
     // (multi-byte UTF-8 text) rather than going back through the mask
-    // for each one. This can run past the end of the block, but no
-    // further than the end of the line.
+    // for each one. This continues across soft line breaks, so it can
+    // run past the end of the block, but only to the end of the line
+    // the block ends in: after each soft break, the run leaves for the
+    // next block once cur >= BLOCK.
     for (;;) {
       char *out = obase + cur;
       char *line_out_end = obase + line_end;
       while (out < line_out_end) {
-        int32_t esc;
+        int32_t esc, stop;
         memcpy(&esc, qp_table[base[cur]], 4);
-#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        if (esc & 0x80) {
-#else
-        if (esc < 0) {
-#endif
+        // the stop flag is the high bit of the entry's fourth byte.
+        // Building the test mask with the same memory layout works on
+        // any endianness and folds to a sign test on little-endian.
+        memcpy(&stop, "\0\0\0\x80", 4);
+        if (esc & stop) {
           obase = out - cur;
           line_end = line_out_end - obase;
           goto escapes_done;
