@@ -73,9 +73,9 @@ THEMES = {
 
 FONT = 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
 
-W = 720
+W = 760                       # wide enough for a full date under every point
 LEFT, RIGHT = 52, 24          # plot edges
-FIRST_X = LEFT + 76           # room for the first point's label
+FIRST_X = LEFT + 84           # room for the first point's label
 LAST_X = W - RIGHT - 24       # and for the last point's date
 PLOT_TOP, PLOT_H = 112, 270
 DOT = 5                       # marker radius
@@ -277,16 +277,10 @@ def render(theme, results):
                    'style="font-variant-numeric: tabular-nums">%s</text>'
                    % (LEFT - 8, gy + 4, t['muted'], '%dx' % tick if tick else '0'))
 
-    # x ticks: the commit's date (the year only where it changes), and
-    # the release it shipped in
-    year = None
+    # x ticks: the commit's date, and the release it shipped in
     for index, (row, _, _) in enumerate(pts):
-        date = fmt_date(row[1])
-        if row[1][:4] == year:
-            date = date.split(',')[0]
-        year = row[1][:4]
         out.append('<text x="%.1f" y="%d" font-size="11" text-anchor="middle" fill="%s">%s</text>'
-                   % (x(index), baseline_y + 18, t['muted'], date))
+                   % (x(index), baseline_y + 18, t['muted'], fmt_date(row[1])))
         if row[5]:
             out.append('<text x="%.1f" y="%d" font-size="11" text-anchor="middle" fill="%s">'
                        'v%s</text>' % (x(index), baseline_y + 33, t['muted'], row[5]))

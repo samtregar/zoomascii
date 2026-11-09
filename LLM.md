@@ -10,7 +10,7 @@ faster than binascii.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/benchmarks/llm_speedups-dark.svg">
-  <img alt="Line chart of b2a_qp speed as a multiple of binascii.b2a_qp after each speed-up: 3.3x at the human-only 1.0 release, 3.4x after Claude Opus 4.1, 4.9x after Claude Fable 5, 13x after Claude Fable 5.1, 17x after GPT-6 Astra, 37x after Claude Opus 5.5, 42x after Gemini 4 and 46x after Claude Fable 5.2" src="docs/benchmarks/llm_speedups.svg" width="720">
+  <img alt="Line chart of b2a_qp speed as a multiple of binascii.b2a_qp after each speed-up: 3.3x at the human-only 1.0 release, 3.4x after Claude Opus 4.1, 4.9x after Claude Fable 5, 13x after Claude Fable 5.1, 17x after GPT-6 Astra, 37x after Claude Opus 5.5, 42x after Gemini 4 and 46x after Claude Fable 5.2" src="docs/benchmarks/llm_speedups.svg" width="760">
 </picture>
 
 Each point is a commit, labelled with the model that wrote it, and
