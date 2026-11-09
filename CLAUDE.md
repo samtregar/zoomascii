@@ -100,6 +100,11 @@ The `data/` directory contains various text files used for testing and benchmark
 - Writes `docs/benchmarks/b2a_qp.svg` and `b2a_qp-dark.svg`; README.md selects between them with a `<picture>` element for the viewer's theme
 - Rerun it whenever the benchmark numbers in the README change
 
+**bin/llm_chart.py** - Regenerates the chart and table in LLM.md
+- LLM.md records each speed-up since 1.0, the last human-only release, and the model that wrote it
+- Run with: `taskset -c 2 python3 bin/llm_chart.py --measure`. It builds every commit in its `MILESTONES` list, times them in one process against `binascii.b2a_qp` on the bench.py corpus, saves the numbers in `docs/benchmarks/llm_speedups.json`, writes `llm_speedups.svg` and `llm_speedups-dark.svg` beside it, and prints the table for LLM.md. Without `--measure` it redraws from the saved numbers
+- When a speed-up lands, add its commit and model to `MILESTONES`, rerun with `--measure`, and update LLM.md: the table, the opening paragraph, the chart's alt text, and a section on what the model did
+
 **bin/verify_correct.py** - Correctness harness for `b2a_qp`
 - Run with: `PYTHONPATH=. python3 bin/verify_correct.py`
 - Round-trips the corpus, ~35 edge cases, and 400 random inputs through `binascii.a2b_qp`

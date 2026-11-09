@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="456" viewBox="0 0 720 456" role="img" aria-labelledby="t d">
+<title id="t">b2a_qp speed-ups since the last human-only release</title>
+<desc id="d">Human only (Sam Tregar), Mar 4, 2025: 3.3x faster than binascii.b2a_qp; Claude Opus 4.1, Aug 16, 2025: 3.4x faster than binascii.b2a_qp; Claude Fable 5, Jun 9, 2026: 4.9x faster than binascii.b2a_qp; Claude Fable 5.1, Sep 1, 2026: 13x faster than binascii.b2a_qp; GPT-6 Astra, Sep 5, 2026: 17x faster than binascii.b2a_qp; Claude Opus 5.5, Sep 22, 2026: 37x faster than binascii.b2a_qp; Gemini 4, Oct 14, 2026: 42x faster than binascii.b2a_qp; Claude Fable 5.2, Nov 9, 2026: 46x faster than binascii.b2a_qp</desc>
+<rect width="720" height="456" fill="#fcfcfb"/>
+<g font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
+<text x="24" y="32" font-size="16" font-weight="600" fill="#0b0b0b">b2a_qp speed-ups since the last human-only release</text>
+<text x="24" y="52" font-size="12" fill="#52514e">Times faster than binascii.b2a_qp · 472 KB corpus, Python 3.11, one core · measured November 2026</text>
+<circle cx="29.0" cy="78" r="5" fill="#898781"/>
+<text x="40.0" y="82" font-size="12" fill="#52514e">Human</text>
+<circle cx="101.5" cy="78" r="5" fill="#2a78d6"/>
+<text x="112.5" y="82" font-size="12" fill="#52514e">Claude (Anthropic)</text>
+<circle cx="245.7" cy="78" r="5" fill="#eb6834"/>
+<text x="256.7" y="82" font-size="12" fill="#52514e">GPT (OpenAI)</text>
+<circle cx="361.6" cy="78" r="5" fill="#1baf7a"/>
+<text x="372.6" y="82" font-size="12" fill="#52514e">Gemini (Google)</text>
+<line x1="52" y1="382.0" x2="696" y2="382.0" stroke="#c3c2b7" stroke-width="1"/>
+<text x="44" y="386.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="52" y1="337.0" x2="696" y2="337.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="341.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">10x</text>
+<line x1="52" y1="292.0" x2="696" y2="292.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="296.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">20x</text>
+<line x1="52" y1="247.0" x2="696" y2="247.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="251.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">30x</text>
+<line x1="52" y1="202.0" x2="696" y2="202.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="206.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">40x</text>
+<line x1="52" y1="157.0" x2="696" y2="157.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="161.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">50x</text>
+<line x1="52" y1="112.0" x2="696" y2="112.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="44" y="116.0" font-size="11" text-anchor="end" fill="#898781" style="font-variant-numeric: tabular-nums">60x</text>
+<text x="128.0" y="400" font-size="11" text-anchor="middle" fill="#898781">Mar 4, 2025</text>
+<text x="128.0" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.0</text>
+<text x="205.7" y="400" font-size="11" text-anchor="middle" fill="#898781">Aug 16</text>
+<text x="283.4" y="400" font-size="11" text-anchor="middle" fill="#898781">Jun 9, 2026</text>
+<text x="283.4" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.1</text>
+<text x="361.1" y="400" font-size="11" text-anchor="middle" fill="#898781">Sep 1</text>
+<text x="361.1" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.2</text>
+<text x="438.9" y="400" font-size="11" text-anchor="middle" fill="#898781">Sep 5</text>
+<text x="438.9" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.3</text>
+<text x="516.6" y="400" font-size="11" text-anchor="middle" fill="#898781">Sep 22</text>
+<text x="516.6" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.4</text>
+<text x="594.3" y="400" font-size="11" text-anchor="middle" fill="#898781">Oct 14</text>
+<text x="594.3" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.5</text>
+<text x="672.0" y="400" font-size="11" text-anchor="middle" fill="#898781">Nov 9</text>
+<text x="374.0" y="440" font-size="11" text-anchor="middle" fill="#898781">Commits that made b2a_qp faster, in order (not to time scale)</text>
+<line x1="128.0" y1="367.3" x2="205.7" y2="366.6" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<line x1="205.7" y1="366.6" x2="283.4" y2="360.0" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<line x1="283.4" y1="360.0" x2="361.1" y2="322.1" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<line x1="361.1" y1="322.1" x2="438.9" y2="303.3" stroke="#eb6834" stroke-width="2" stroke-linecap="round"/>
+<line x1="438.9" y1="303.3" x2="516.6" y2="216.8" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<line x1="516.6" y1="216.8" x2="594.3" y2="194.9" stroke="#1baf7a" stroke-width="2" stroke-linecap="round"/>
+<line x1="594.3" y1="194.9" x2="672.0" y2="173.2" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<circle cx="128.0" cy="367.3" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="205.7" cy="366.6" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="283.4" cy="360.0" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="361.1" cy="322.1" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="438.9" cy="303.3" r="5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="516.6" cy="216.8" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="594.3" cy="194.9" r="5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="672.0" cy="173.2" r="5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="130.0" y="339.3" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Human only</text>
+<text x="130.0" y="354.3" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">3.3x</text>
+<text x="207.7" y="338.6" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Opus 4.1</text>
+<text x="207.7" y="353.6" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">3.4x</text>
+<text x="285.4" y="332.0" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Fable 5</text>
+<text x="285.4" y="347.0" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">4.9x</text>
+<text x="363.1" y="294.1" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Fable 5.1</text>
+<text x="363.1" y="309.1" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">13x</text>
+<text x="440.9" y="275.3" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">GPT-6 Astra</text>
+<text x="440.9" y="290.3" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">17x</text>
+<text x="518.6" y="188.8" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Opus 5.5</text>
+<text x="518.6" y="203.8" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">37x</text>
+<text x="596.3" y="166.9" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Gemini 4</text>
+<text x="596.3" y="181.9" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">42x</text>
+<text x="674.0" y="145.2" font-size="12" font-weight="600" text-anchor="end" fill="#0b0b0b" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke">Fable 5.2</text>
+<text x="674.0" y="160.2" font-size="12" text-anchor="end" fill="#52514e" stroke="#fcfcfb" stroke-width="4" stroke-linejoin="round" paint-order="stroke" style="font-variant-numeric: tabular-nums">46x</text>
+</g></svg>

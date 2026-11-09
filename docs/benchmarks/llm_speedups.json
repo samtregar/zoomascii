@@ -1,0 +1,44 @@
+{
+  "measured": "2026-11-09",
+  "python": "3.11.6",
+  "cpu": "AMD Ryzen 7 PRO 7840U w/ Radeon 780M Graphics",
+  "samples": 15,
+  "binascii": {
+    "best": 477.77,
+    "median": 469.73
+  },
+  "builds": {
+    "1ab699a": {
+      "best": 1565.0,
+      "median": 1506.48
+    },
+    "ab67a56": {
+      "best": 1631.57,
+      "median": 1600.4
+    },
+    "afb42dd": {
+      "best": 2332.4,
+      "median": 2312.77
+    },
+    "7c75f1c": {
+      "best": 6355.26,
+      "median": 6232.5
+    },
+    "36849b5": {
+      "best": 8355.4,
+      "median": 8225.3
+    },
+    "d94dc1b": {
+      "best": 17535.5,
+      "median": 17035.98
+    },
+    "cc3ec95": {
+      "best": 19869.05,
+      "median": 19528.91
+    },
+    "0119bd0": {
+      "best": 22165.59,
+      "median": 21832.27
+    }
+  }
+}
