@@ -6,6 +6,10 @@ Then rebuild in place and compare on one CPU:
     python3 setup.py build_ext --inplace --force
     PYTHONPATH=. taskset -c 2 python3 bin/bench_zoom.py \
         --baseline /tmp/qp-before --per-file
+
+The corpus is mostly two large files, so it says little about the fixed
+cost of a call. --sizes 100,1000,10000 also measures the first that many
+bytes of the largest file, with more encodes per sample.
 """
 import argparse
 import timeit
@@ -49,11 +53,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', help='directory containing a saved extension build')
     parser.add_argument('--per-file', action='store_true', help='also measure each corpus file')
+    parser.add_argument('--sizes', default='', help='also measure the first N bytes of the largest corpus file, for each comma-separated N')
     parser.add_argument('--number', type=int, default=200, help='encodes per sample (default: 200)')
     parser.add_argument('--repeat', type=int, default=10, help='samples per build (default: 10)')
     args = parser.parse_args()
     if args.number < 1 or args.repeat < 1:
         parser.error('--number and --repeat must be positive')
+    try:
+        sizes = [int(size) for size in args.sizes.split(',') if size]
+    except ValueError:
+        parser.error('--sizes takes comma-separated byte counts')
+    largest = max(corpus, key=len)
+    slices = [largest[:size] for size in sizes]
 
     encoders = [zoomascii.b2a_qp]
     labels = ['zoom qp']
@@ -70,16 +81,24 @@ def main():
         spec.loader.exec_module(baseline)
         encoders.insert(0, baseline.b2a_qp)
         labels.insert(0, 'baseline')
-        for data in corpus:
+        for data in corpus + slices:
             for dots in (False, True):
                 if baseline.b2a_qp(data, dots) != zoomascii.b2a_qp(data, dots):
                     parser.error('current and baseline encoders produced different output')
 
-    cases = [('corpus', corpus)]
+    cases = [('corpus', corpus, 1)]
     if args.per_file:
-        cases.extend((name, [data]) for name, data in zip(names, corpus))
-    for name, payloads in cases:
-        results = benchmark(encoders, payloads, args.number, args.repeat)
+        cases.extend((name, [data], 1) for name, data in zip(names, corpus))
+    # Small inputs get more encodes per sample, so a sample covers about
+    # as many bytes as a pass over the corpus does (but no more than
+    # 500 times as many calls).
+    total = sum(len(data) for data in corpus)
+    cases.extend(('first %d bytes' % len(data), [data],
+                  max(1, min(500, total // max(len(data), 1))))
+                 for data in slices)
+    for name, payloads, scale in cases:
+        results = benchmark(encoders, payloads, args.number * scale,
+                            args.repeat)
         for label, (best, median) in zip(labels, results):
             print('%s %s best: %.2f ops/s (median %.2f)' % (name, label, best, median))
         if args.baseline:

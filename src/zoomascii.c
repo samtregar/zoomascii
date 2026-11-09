@@ -93,22 +93,57 @@ static Py_ssize_t roundUp4k(Py_ssize_t numToRound) {
 // first and the remaining 48 only when needed.
 #define COPY 80
 
-// Reads relative to the block start reach back to the start of a plain
-// run carried over from the previous block, which starts less than a
-// line before the block. They reach forward to the end of a copy
-// starting at offset 63.
+// Reads reach back from the block start to the start of a plain run
+// carried over from the previous block, which starts less than a line
+// before the block. They reach forward to the end of a copy starting
+// at offset 63.
 #define HISTORY 80
 #define BLOCK_READ (BLOCK + COPY)
 
-// Output space needed between checks, one per block: a plain run
-// carried over from the previous block (up to 72 bytes), then up to
-// 88 bytes that may all need escaping (an escape run started at offset
-// 63 can continue up to 24 escapes into the next block before the line
-// fills), soft line breaks for all that, 5 more for re-encoding a
-// trailing space, and 80 bytes of copy overshoot.
+// The most output a block can add: 64 escapes and the soft line breaks
+// that go with them (3 bytes for every 72).
+#define BLOCK_OUTPUT 200
+
+// Output space needed on top of BLOCK_OUTPUT for each block that runs
+// between two checks: a plain run carried over from before the first
+// block (up to 72 bytes), up to 25 bytes past the last block that may
+// all need escaping (an escape run that started inside it continues
+// until its line fills), soft line breaks for both, 5 more for
+// re-encoding a trailing space, and 80 bytes of copy overshoot.
 #define OUTPUT_SLACK 512
 
-#if defined(__GNUC__) || defined(__clang__)
+// The end of the input is encoded from a copy, which takes up to three
+// blocks. There are no checks on the output while that happens.
+#define TAIL_ROOM (OUTPUT_SLACK + 2 * BLOCK_OUTPUT)
+
+// The copy holds the last TAIL_DATA bytes of the input: the less than
+// BLOCK_READ bytes that are left to encode and HISTORY before them. It
+// is followed by TAIL_PAD bytes of padding, which is as far as the
+// block the input ends in can read.
+#define TAIL_DATA (HISTORY + BLOCK_READ)
+#define TAIL_PAD BLOCK_READ
+
+// Inputs up to SMALL_INPUT bytes are encoded into a buffer on the
+// stack and the result is made from that, at its exact size. That
+// costs a copy, but small allocations are much cheaper than large ones
+// (with glibc, about 100 cycles less under 1KB) and a small result
+// doesn't keep a 4KB buffer alive. The buffer has room for text of
+// that size, if not for the worst case.
+#define SMALL_INPUT 896
+#define SMALL_OUTPUT 2048
+
+#if defined(__GNUC__) && !defined(__clang__) && defined(__x86_64__) && !defined(NO_ASM_CTZ)
+// GCC sign-extends the result of __builtin_ctzll before using it as an
+// index and, when tuning for generic x86-64, also clears the register
+// first. Both are wasted work in the hot loop. This is the same
+// instruction on its own: it runs as tzcnt where that exists and as
+// bsf elsewhere, which agree on anything but zero.
+static inline size_t ctz64(uint64_t x) {
+  size_t n;
+  __asm__("rep bsf {%1, %0|%0, %1}" : "=r"(n) : "rm"(x) : "cc");
+  return n;
+}
+#elif defined(__GNUC__) || defined(__clang__)
 #define ctz64(x) ((unsigned int)__builtin_ctzll(x))
 #elif defined(_MSC_VER) && defined(_M_X64)
 #include <intrin.h>
@@ -192,228 +227,318 @@ static PyObject*
 b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_buffer input_buf;
   PyObject *ret;
-  const unsigned char *input, *base;
-  char *output, *output_limit, *obase;
-  Py_ssize_t input_len, output_len, j, b, b_limit, cur, line_end, e;
+  const unsigned char *input, *input_end, *p, *cur, *pe;
+  char *output, *ocur;
+  Py_ssize_t input_len, output_len, j, n;
+  size_t e;
+  // positions that can be past the end of the input are kept as plain
+  // addresses
+  uintptr_t line_end, p_limit;
+  // Where the input ends, once the tail is in use. This is only read
+  // when a lone CR turns up. It is volatile to keep it in memory: the
+  // compiler would otherwise spend a register on it, or work it out
+  // again for every block.
+  volatile uintptr_t in_end;
   uint64_t mask;
   unsigned int dot, c;
   // the end of the input gets copied here, so the block code can always
   // read HISTORY bytes before a block and BLOCK_READ from its start.
   // The padding is CRs, which need encoding - that stops plain runs at
-  // the end of the input - and which also stop runs of escapes. The
-  // tail can take up to 3 blocks: it starts less than BLOCK_READ before
-  // the end.
-  unsigned char tail[HISTORY + 2 * BLOCK + BLOCK_READ];
+  // the end of the input - and which also stop runs of escapes.
+  unsigned char tail[TAIL_DATA + TAIL_PAD];
+  char small[SMALL_OUTPUT];
 
   static char *kwlist[] = {"string", "encode_leading_dot", NULL};
   int encode_leading_dot = 1;
+  int have_buffer = 0;
 
-  // get the input string without copying it
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s*|i", kwlist,
-                                   &input_buf, &encode_leading_dot))
-    return NULL;
-  input = input_buf.buf;
-  input_len = input_buf.len;
+  // Get the input string without copying it. The usual call passes a
+  // bytes or str object, and maybe a bool, by position. Those are read
+  // directly: the general argument parser takes as long as encoding a
+  // few hundred bytes.
+  input = NULL;
+  if (kwargs == NULL && PyTuple_GET_SIZE(args) >= 1 &&
+      (PyTuple_GET_SIZE(args) == 1 ||
+       (PyTuple_GET_SIZE(args) == 2 &&
+        PyBool_Check(PyTuple_GET_ITEM(args, 1))))) {
+    PyObject *string = PyTuple_GET_ITEM(args, 0);
+
+    if (PyBytes_CheckExact(string)) {
+      input = (const unsigned char *)PyBytes_AS_STRING(string);
+      input_len = PyBytes_GET_SIZE(string);
+    }
+#if PY_MAJOR_VERSION >= 3
+    else if (PyUnicode_CheckExact(string)) {
+      input = (const unsigned char *)PyUnicode_AsUTF8AndSize(string,
+                                                             &input_len);
+      if (!input)
+        return NULL;
+    }
+#endif
+    if (input && PyTuple_GET_SIZE(args) == 2)
+      encode_leading_dot = PyTuple_GET_ITEM(args, 1) == Py_True;
+  }
+  if (!input) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s*|i", kwlist,
+                                     &input_buf, &encode_leading_dot))
+      return NULL;
+    input = input_buf.buf;
+    input_len = input_buf.len;
+    have_buffer = 1;
+  }
 
   assert(input_len >= 0);
 
   // Special case for empty input - return empty bytes directly
   if (input_len == 0) {
-    PyBuffer_Release(&input_buf);
+    if (have_buffer)
+      PyBuffer_Release(&input_buf);
     return PyBytes_FromStringAndSize("", 0);
   }
 
   if (input_len > PY_SSIZE_T_MAX / 2) {
-    PyBuffer_Release(&input_buf);
+    if (have_buffer)
+      PyBuffer_Release(&input_buf);
     return PyErr_NoMemory();
   }
 
-  // get a string to work on, in a format we can return directly
-  // without more copying - start with a string twice as large, could
-  // be more careful here and use less memory
-  output_len = roundUp4k(input_len * 2);
+  input_end = input + input_len;
 
-  ret = PyBytes_FromStringAndSize(NULL, output_len);
-  if (!ret) {
-    PyBuffer_Release(&input_buf);
-    return NULL;
+  // Copy the end of the input, followed by the padding. This is done
+  // long before it is needed because reading something back right
+  // after writing it in pieces of a different size has to wait for the
+  // writes to reach the cache. Both are fixed-size copies the compiler
+  // can inline when the input is long enough.
+  if (input_len >= TAIL_DATA)
+    memcpy(tail, input_end - TAIL_DATA, TAIL_DATA);
+  else
+    memcpy(tail + TAIL_DATA - input_len, input, input_len);
+  memset(tail + TAIL_DATA, CR, TAIL_PAD);
+
+  if (input_len <= SMALL_INPUT) {
+    ret = NULL;
+    output = small;
+    output_len = SMALL_OUTPUT;
+  } else {
+    // get a string to work on, in a format we can return directly
+    // without more copying - start with a string twice as large, could
+    // be more careful here and use less memory
+    output_len = roundUp4k(input_len * 2);
+    ret = PyBytes_FromStringAndSize(NULL, output_len);
+    if (!ret) {
+      if (have_buffer)
+        PyBuffer_Release(&input_buf);
+      return NULL;
+    }
+    output = PyBytes_AS_STRING(ret);
   }
-  output = PyBytes_AS_STRING(ret);
-  output_limit = output + output_len - OUTPUT_SLACK;
 
   // a leading '.' is compared against this, which never matches a byte
   // when leading dots are left alone
   dot = encode_leading_dot ? '.' : 256;
 
+#define ADDR(q) ((uintptr_t)(q))
+
 // not actually part of QP encoding but SMTP needs this - encode a
 // leading . on a line. This is used right after a line starts. The dot
 // isn't in the mask, so skipping over it here is all it takes.
 #define LEADING_DOT() do {                              \
-    if (base[cur] == dot) {                             \
-      memcpy(obase + cur, "=2E", 4);                    \
-      obase += 2;                                       \
+    if (unlikely(*cur == dot)) {                        \
+      memcpy(ocur, "=2E", 4);                           \
+      ocur += 3;                                        \
       line_end -= 2;                                    \
       cur++;                                            \
     }                                                   \
   } while (0)
 
-// soft line break before input position pos
-#define SOFT_BREAK(pos) do {                            \
-    memcpy(obase + (pos), "=\r\n", 4);                  \
-    obase += 3;                                         \
-    line_end = (pos) + MAX_LINE_LENGTH;                 \
+// soft line break before the input byte at cur
+#define SOFT_BREAK() do {                               \
+    memcpy(ocur, "=\r\n", 4);                           \
+    ocur += 3;                                          \
+    line_end = ADDR(cur) + MAX_LINE_LENGTH;             \
   } while (0)
 
-// switch base over to a copy of the rest of the input in tail. Filling
-// all of it with padding first is a fixed-size memset the compiler can
-// inline, which is quicker than working out how much padding is needed.
-#define USE_TAIL() do {                                         \
-    Py_ssize_t pos = input_len + b;                             \
-    Py_ssize_t history = pos < HISTORY ? pos : HISTORY;         \
-    tail[HISTORY - 1] = 0;                                      \
-    memset(tail + HISTORY, CR, sizeof(tail) - HISTORY);         \
-    memcpy(tail + HISTORY - history, base - history,            \
-           history - b);                                        \
-    base = tail + HISTORY;                                      \
-    b_limit = PY_SSIZE_T_MAX;                                   \
+// the line fills up inside the plain run that starts at cur
+#define FILL_LINE() do {                                \
+    memcpy(ocur, cur, COPY);                            \
+    ocur += line_end - ADDR(cur);                       \
+    cur = (const unsigned char *)line_end;              \
+    SOFT_BREAK();                                       \
+    LEADING_DOT();                                      \
   } while (0)
 
-  // Positions are relative to the current block, which starts at
-  // base; b counts up from -input_len so b + e == 0 at the end of the
-  // input. cur is the next input byte to encode. It can be negative
-  // when a plain run carries over from the previous block, and it moves
-  // past BLOCK when something reads into the next block. obase + k is
-  // where input byte k goes in the output if it passes through, so a
-  // plain run needs no output bookkeeping; each escape moves it on by 2
-  // and each soft line break by 3. line_end is the input position where
-  // the current line fills up if everything up to there passes through,
-  // so each escape pulls it in by 2.
-  b = -input_len;
-  b_limit = -BLOCK_READ;
-  base = input;
-  if (b > b_limit)
-    USE_TAIL();
-  obase = output;
-  cur = 0;
-  line_end = MAX_LINE_LENGTH;
-  if (unlikely(base[0] == CR && base[1] == LF)) {
-    obase[0] = CR;
-    obase[1] = LF;
-    cur = 2;
-    line_end = 2 + MAX_LINE_LENGTH;
+  // p is the current block and cur the next input byte to encode,
+  // which goes to ocur in the output. cur can be before the block when
+  // a plain run carries over from the previous block, and it moves
+  // past the block's end when something reads into the next block.
+  // line_end is the input address where the current line fills up if
+  // everything up to there passes through, so each escape pulls it in
+  // by 2.
+  cur = input;
+  ocur = output;
+  if (unlikely(input_len >= 2 && input[0] == CR && input[1] == LF)) {
+    ocur[0] = CR;
+    ocur[1] = LF;
+    ocur += 2;
+    cur += 2;
   }
-  LEADING_DOT();
-  mask = escape_mask(base) & (~(uint64_t)0 << cur);
+  line_end = ADDR(cur) + MAX_LINE_LENGTH;
+  if (cur != input_end)
+    LEADING_DOT();
+  in_end = UINTPTR_MAX;
+  p = input;
+  p_limit = ADDR(p);
+  goto first_block;
 
   for (;;) {
     if (mask == 0) {
-      if (line_end > BLOCK) {
-      next_block:
-        // nothing left to encode in this block - move on to the next.
-        // Any plain run so far just carries over.
-        b += BLOCK;
-        base += BLOCK;
-        obase += BLOCK;
-        cur -= BLOCK;
-        line_end -= BLOCK;
-        if (unlikely(b > b_limit))
-          USE_TAIL();
-        // make sure this block can't run off the end of the output
-        if (unlikely(obase + cur > output_limit)) {
-          // get another 4k and realloc the string
-          j = obase + cur - output;
-          output_len = roundUp4k(j + OUTPUT_SLACK);
-          if (_PyBytes_Resize(&ret, output_len) == -1) {
-            PyBuffer_Release(&input_buf);
+      // nothing left to encode in this block
+      if (line_end <= ADDR(p) + BLOCK)
+        FILL_LINE();
+    next_block:
+      // Move on to the next block. Any plain run so far just carries
+      // over.
+      p += BLOCK;
+    first_block:
+      if (unlikely(ADDR(p) >= p_limit)) {
+        // This is as far as the input and the output were known to be
+        // good for. See how much further they go.
+        Py_ssize_t left = input_end - p;
+        Py_ssize_t room, blocks;
+
+        j = ocur - output;
+        room = left < BLOCK_READ ? TAIL_ROOM : OUTPUT_SLACK + BLOCK_OUTPUT;
+        if (output_len - j < room) {
+          // Twice the input wasn't enough. Whatever needed that much
+          // encoding probably carries on, so get enough for the rest
+          // of the input in the worst case.
+          if (left > (PY_SSIZE_T_MAX - j) / 4 - TAIL_ROOM - 4096) {
+            Py_XDECREF(ret);
+            if (have_buffer)
+              PyBuffer_Release(&input_buf);
+            return PyErr_NoMemory();
+          }
+          output_len = roundUp4k(j + left * 3 + left / 8 + TAIL_ROOM);
+          if (!ret) {
+            // the output has outgrown the buffer on the stack
+            ret = PyBytes_FromStringAndSize(NULL, output_len);
+            if (ret)
+              memcpy(PyBytes_AS_STRING(ret), small, j);
+          } else {
+            // this frees the string and clears ret if it fails
+            _PyBytes_Resize(&ret, output_len);
+          }
+          if (!ret) {
+            if (have_buffer)
+              PyBuffer_Release(&input_buf);
             return NULL;
           }
           output = PyBytes_AS_STRING(ret);
-          output_limit = output + output_len - OUTPUT_SLACK;
-          obase = output + j - cur;
+          ocur = output + j;
         }
-        mask = escape_mask(base);
-        // bits below cur were handled by the previous block
-        if (cur > 0)
-          mask &= ~(uint64_t)0 << cur;
-        continue;
+        if (left < BLOCK_READ) {
+          // switch over to the copy of the end of the input
+          uintptr_t shift = ADDR(tail + TAIL_DATA) - ADDR(input_end);
+
+          p = (const unsigned char *)(ADDR(p) + shift);
+          cur = (const unsigned char *)(ADDR(cur) + shift);
+          line_end += shift;
+          in_end = ADDR(tail + TAIL_DATA);
+          p_limit = UINTPTR_MAX;
+        } else {
+          // blocks the output has room for, and blocks that can be
+          // read straight from the input
+          room = (output_len - j - OUTPUT_SLACK) / BLOCK_OUTPUT;
+          blocks = (left - BLOCK_READ) / BLOCK + 1;
+          p_limit = ADDR(p) + (room < blocks ? room : blocks) * BLOCK;
+        }
       }
-      e = BLOCK;
-    } else {
-    next_escape:
-      e = ctz64(mask);
+      mask = escape_mask(p);
+      // bits below cur were handled by the previous block
+      if (cur > p)
+        mask &= ~(uint64_t)0 << (cur - p);
+      continue;
     }
 
-    if (unlikely(e >= line_end)) {
-      // the line fills up inside the run
-      memcpy(obase + cur, base + cur, COPY);
-      cur = line_end;
-      SOFT_BREAK(cur);
-      LEADING_DOT();
-      if (mask == 0)
-        goto next_block;
-    }
+    pe = p + ctz64(mask);
+  next_escape:
+    if (unlikely(ADDR(pe) >= line_end))
+      FILL_LINE();
 
     // copy the plain run up to the next byte that needs encoding.
     // Anything past the run gets overwritten by whatever comes next.
-    memcpy(obase + cur, base + cur, 32);
-    if (unlikely(e - cur > 32))
-      memcpy(obase + cur + 32, base + cur + 32, 48);
-    cur = e;
+    n = pe - cur;
+    memcpy(ocur, cur, 32);
+    if (unlikely(n > 32))
+      memcpy(ocur + 32, cur + 32, 48);
+    ocur += n;
 
-    c = base[e];
-    if (c == CR) {
-      if (base[e+1] == LF) {
+  adjacent:
+    c = *pe;
+    if (unlikely(c == CR)) {
+      if (likely(pe[1] == LF)) {
         // CRLF can go as-is and resets the line. A space or tab right
         // before it has to be encoded, but it has already been copied
         // through as part of a plain run. Replace it. If it filled its
         // line, the soft line break after it is still needed after the
-        // longer encoded form. base[e-1] is always readable: in later
-        // blocks it is in HISTORY, and a CRLF at input byte 0 is
-        // consumed before the loop, so e == 0 never reaches this in
-        // the first block. Without that special case, base[-1] would
-        // read before the input on inputs of BLOCK_READ bytes or more.
-        if (unlikely(base[e-1] == ' ' || base[e-1] == '\t')) {
-          c = base[e-1];
-          if (line_end - e == MAX_LINE_LENGTH) {
-            memcpy(obase + e - 4, qp_table[c], 4);
-            memcpy(obase + e - 1, "=\r\n", 4);
-            obase += 2;
+        // longer encoded form. pe[-1] is always readable: a CRLF at
+        // input byte 0 is consumed before the loop, so pe is never the
+        // first byte of the input here.
+        if (unlikely(pe[-1] == ' ' || pe[-1] == '\t')) {
+          c = pe[-1];
+          if (line_end - ADDR(pe) == MAX_LINE_LENGTH) {
+            memcpy(ocur - 4, qp_table[c], 4);
+            memcpy(ocur - 1, "=\r\n", 4);
+            ocur += 2;
           } else {
-            memcpy(obase + e - 1, qp_table[c], 4);
-            obase += 2;
-            line_end -= 2;
-            if (e >= line_end)
-              SOFT_BREAK(e);
+            memcpy(ocur - 1, qp_table[c], 4);
+            ocur += 2;
+            if (ADDR(pe) >= line_end - 2) {
+              memcpy(ocur, "=\r\n", 4);
+              ocur += 3;
+            }
           }
         }
-        obase[e] = CR;
-        obase[e+1] = LF;
+        // one 4-byte store; the next output overwrites the zeros
+        memcpy(ocur, "\r\n\0", 4);
+        ocur += 2;
         mask &= mask - 1;
         mask &= mask - 1;
-        cur = e + 2;
-        line_end = cur + MAX_LINE_LENGTH;
+        cur = pe + 2;
+        line_end = ADDR(cur) + MAX_LINE_LENGTH;
         LEADING_DOT();
-        if (mask)
-          goto next_escape;
-        goto next_block;
+        continue;
       }
       // the tail padding is CRs, so this is where the input ends
-      if (b + e >= 0)
+      if (ADDR(pe) >= in_end)
         break;
     }
 
     // encode all other chars as =XX. The table entries are 4 bytes so
     // this is a single 32-bit store; the fourth byte is overwritten by
     // the next output.
-    memcpy(obase + e, qp_table[c], 4);
-    obase += 2;
+    memcpy(ocur, qp_table[c], 4);
+    ocur += 3;
     line_end -= 2;
-    cur = e + 1;
-    if (likely(!(mask >> (cur & 63) & 1)) && likely(cur < line_end)) {
-      // the common case: a single escape in the middle of a line
-      mask &= mask - 1;
-      if (mask)
-        goto next_escape;
+    cur = pe + 1;
+    mask &= mask - 1;
+    if (mask) {
+      e = ctz64(mask);
+      pe = p + e;
+      if (likely(ADDR(cur) < line_end)) {
+        // the common case: a single escape in the middle of a line
+        if (likely(pe != cur))
+          goto next_escape;
+        // The next byte needs encoding as well. Unless at least three
+        // in a row do, take them one at a time: that is the rest of a
+        // two or three byte UTF-8 character, which is quicker than
+        // getting into and out of the loop below, and the next escape
+        // after it doesn't have to wait to find out where this one
+        // ended.
+        if ((mask >> e & 7) != 7)
+          goto adjacent;
+      }
+    } else if (likely(ADDR(cur) < line_end)) {
       continue;
     }
 
@@ -422,68 +547,94 @@ b2a_qp(PyObject *self, PyObject *args, PyObject *kwargs) {
     // for each one. This continues across soft line breaks, so it can
     // run past the end of the block, but only to the end of the line
     // the block ends in: after each soft break, the run leaves for the
-    // next block once cur >= BLOCK.
+    // next block once cur is past this one.
     for (;;) {
-      char *out = obase + cur;
-      char *line_out_end = obase + line_end;
-      while (out < line_out_end) {
-        int32_t esc, stop;
-        memcpy(&esc, qp_table[base[cur]], 4);
-        // the stop flag is the high bit of the entry's fourth byte.
-        // Building the test mask with the same memory layout works on
-        // any endianness and folds to a sign test on little-endian.
-        memcpy(&stop, "\0\0\0\x80", 4);
-        if (esc & stop) {
-          obase = out - cur;
-          line_end = line_out_end - obase;
+      // where the line fills up in the output
+      char *oline_end = ocur + (Py_ssize_t)(line_end - ADDR(cur));
+      int32_t esc, esc2, stop;
+      // The stop flag is the high bit of a table entry's fourth byte.
+      // Building the test mask with the same memory layout works on
+      // any endianness and folds to a sign test on little-endian.
+      memcpy(&stop, "\0\0\0\x80", 4);
+      // two at a time while the line has room for both
+      while (ocur + 3 < oline_end) {
+        memcpy(&esc, qp_table[cur[0]], 4);
+        memcpy(&esc2, qp_table[cur[1]], 4);
+        if ((esc | esc2) & stop) {
+          if (!(esc & stop)) {
+            memcpy(ocur, &esc, 4);
+            ocur += 3;
+            cur++;
+          }
+          line_end = ADDR(cur) + (oline_end - ocur);
           goto escapes_done;
         }
-        memcpy(out, &esc, 4);
-        out += 3;
+        memcpy(ocur, &esc, 4);
+        memcpy(ocur + 3, &esc2, 4);
+        ocur += 6;
+        cur += 2;
+      }
+      // the line has room for one more at most
+      if (ocur < oline_end) {
+        memcpy(&esc, qp_table[*cur], 4);
+        if (esc & stop) {
+          line_end = ADDR(cur) + (oline_end - ocur);
+          goto escapes_done;
+        }
+        memcpy(ocur, &esc, 4);
+        ocur += 3;
         cur++;
       }
-      obase = out - cur;
-      SOFT_BREAK(cur);
+      SOFT_BREAK();
       LEADING_DOT();
-      if (cur >= BLOCK)
+      n = cur - p;
+      if (n >= BLOCK)
         goto next_block;
     }
   escapes_done:
-    if (cur >= BLOCK)
+    n = cur - p;
+    if (n >= BLOCK)
       goto next_block;
-    mask &= ~(uint64_t)0 << cur;
+    // the bits before cur are done
+    mask = mask >> n << n;
   }
 #undef LEADING_DOT
 #undef SOFT_BREAK
-#undef USE_TAIL
+#undef FILL_LINE
 
   // a space or tab at the very end also has to be encoded, as at a CRLF
-  c = base[e-1];
+  c = pe[-1];
   if (c == ' ' || c == '\t') {
-    if (line_end - cur == MAX_LINE_LENGTH) {
-      memcpy(obase + cur - 4, qp_table[c], 4);
-      memcpy(obase + cur - 1, "=\r\n", 4);
-      obase += 2;
+    if (line_end - ADDR(pe) == MAX_LINE_LENGTH) {
+      memcpy(ocur - 4, qp_table[c], 4);
+      memcpy(ocur - 1, "=\r\n", 4);
+      ocur += 2;
     } else {
-      memcpy(obase + cur - 1, qp_table[c], 4);
-      obase += 2;
-      if (line_end - cur <= 2) {
-        memcpy(obase + cur, "=\r\n", 4);
-        obase += 3;
+      memcpy(ocur - 1, qp_table[c], 4);
+      ocur += 2;
+      if (line_end - ADDR(pe) <= 2) {
+        memcpy(ocur, "=\r\n", 4);
+        ocur += 3;
       }
     }
   }
-  j = obase + cur - output;
+  j = ocur - output;
+#undef ADDR
 
-  // shorten the string by assigning to size directly - safe since we
-  // handled the empty case above. Not shrinking the allocation keeps
-  // the buffer size stable across calls, which lets glibc serve
-  // repeated large allocations from the heap instead of mmap'ing and
-  // page-faulting a fresh region every call.
-  output[j] = '\0';
-  Py_SET_SIZE(ret, j);
+  if (ret) {
+    // shorten the string by assigning to size directly - safe since we
+    // handled the empty case above. Not shrinking the allocation keeps
+    // the buffer size stable across calls, which lets glibc serve
+    // repeated large allocations from the heap instead of mmap'ing and
+    // page-faulting a fresh region every call.
+    output[j] = '\0';
+    Py_SET_SIZE(ret, j);
+  } else {
+    ret = PyBytes_FromStringAndSize(small, j);
+  }
 
-  PyBuffer_Release(&input_buf);
+  if (have_buffer)
+    PyBuffer_Release(&input_buf);
   return ret;
 }
 

@@ -108,6 +108,77 @@ class BasicTests(unittest.TestCase):
     def test_qp_output_growth(self):
         for length in (1365, 2048, 4095, 4096, 4097, 65536):
             self.assert_qp_matches_reference(b'=' * length)
+        # The output starts at twice the input and grows once it turns
+        # out not to be enough, wherever that happens.
+        for plain in (0, 1000, 3000, 7000, 9999):
+            self.assert_qp_matches_reference(
+                b'a' * plain + b'\xff' * (10000 - plain))
+
+    def test_qp_small_inputs(self):
+        # Inputs up to 896 bytes are encoded into a buffer on the stack,
+        # which moves to the heap if the output outgrows it. Check both
+        # sides of that size, with the output overflowing the buffer at
+        # different points.
+        for length in list(range(890, 900)) + [2047, 2048, 2049]:
+            for fill in (b'plain text. ', b'caf\xc3\xa9 \r\n', b'=', b'a='):
+                data = (fill * (length // len(fill) + 1))[:length]
+                self.assert_qp_matches_reference(data)
+            for plain in range(0, length, 97):
+                self.assert_qp_matches_reference(
+                    b'a' * plain + b'=' * (length - plain))
+                self.assert_qp_matches_reference(
+                    b'=' * plain + b'a' * (length - plain))
+
+    def test_qp_escape_runs(self):
+        # Bytes that need encoding come in runs: one for '=' or a bare
+        # LF, two or three for most UTF-8 characters, long ones for
+        # other scripts. Short runs are taken one at a time and long
+        # ones in a loop of their own, two at a time, which carries on
+        # across soft line breaks and block edges.
+        kinds = (b'\xc3\xa9', b'\xe2\x80\x99', b'=', b'\n', b'\xff\r',
+                 b'\xf0\x9f\x98\x80', b'=\r\n')
+        tails = (b'', b'a', b' ', b'.', b'\r\n', b'\r\n.', b'\r', b'b' * 100)
+        lengths = (1, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 47, 48, 49)
+        for offset in list(range(0, 75)) + list(range(120, 136)):
+            for kind in kinds:
+                for length in lengths:
+                    run = (kind * length)[:length]
+                    tail = tails[(offset + length) % len(tails)]
+                    self.assert_qp_matches_reference(
+                        b'a' * offset + run + tail)
+
+    def test_qp_arguments(self):
+        # bytes and str passed by position are read without the general
+        # argument parser. Everything else has to give the same answer.
+        class Bytes(bytes):
+            pass
+
+        class Text(type(u'')):
+            pass
+
+        for data in (b'', b'a', b'.dot = x \r\n.', b'caf\xc3\xa9' * 300):
+            text = data.decode('utf-8')
+            for dots in (True, False):
+                expected = reference_qp(data, dots)
+                for value in (data, bytearray(data), memoryview(data),
+                              Bytes(data), text, Text(text)):
+                    self.assertEqual(zoomascii.b2a_qp(value, dots), expected)
+                    self.assertEqual(zoomascii.b2a_qp(value, int(dots)),
+                                     expected)
+                    self.assertEqual(
+                        zoomascii.b2a_qp(value, encode_leading_dot=dots),
+                        expected)
+                    self.assertEqual(
+                        zoomascii.b2a_qp(string=value,
+                                         encode_leading_dot=dots),
+                        expected)
+                    if dots:
+                        self.assertEqual(zoomascii.b2a_qp(value), expected)
+        self.assertRaises(TypeError, zoomascii.b2a_qp)
+        self.assertRaises(TypeError, zoomascii.b2a_qp, b'a', None)
+        self.assertRaises(TypeError, zoomascii.b2a_qp, b'a', True, 1)
+        self.assertRaises(TypeError, zoomascii.b2a_qp, b'a', other=1)
+        self.assertRaises(OverflowError, zoomascii.b2a_qp, b'a', 2 ** 70)
 
     def test_qp_releases_input_buffer(self):
         for data in (b'', b'short', b'a=\r\n' * 1000):
