@@ -29,7 +29,7 @@ The Step column gives each model's own factor.
 | Sep 5, 2026 | `36849b5` | GPT-6 Astra | 1.3 | 8,355 | 17x | 1.31x |
 | Sep 22, 2026 | `d94dc1b` | Claude Opus 5.5 | 1.4 | 17,536 | 37x | 2.10x |
 | Oct 14, 2026 | `cc3ec95` | Gemini 4 | 1.5 | 19,869 | 42x | 1.13x |
-| Nov 9, 2026 | `0119bd0` | Claude Fable 5.2 | - | 22,166 | 46x | 1.12x |
+| Nov 9, 2026 | `0119bd0` | Claude Fable 5.2 | 1.6 | 22,166 | 46x | 1.12x |
 
 ## How this was measured
 
@@ -147,7 +147,7 @@ Claude Opus 5.5 reviewed this change before release and fixed a case
 it found: on a big-endian compiler that does not define
 `__BYTE_ORDER__`, the escape loop would never stop (`13049ad`).
 
-### Claude Fable 5.2 (November 9, 2026, not yet released)
+### Claude Fable 5.2 (November 9, 2026, release 1.6)
 
 Commit `0119bd0`.  Reported as 1.10x on the corpus and up to 1.55x on
 short inputs.
@@ -176,8 +176,8 @@ Changes that did not affect speed:
 - Claude Fable 5: README and CLAUDE.md updates for 1.1 (`9f59c61`,
   `2653874`).
 - Claude Opus 4.8: the 1.1 version bump (`37627ef`).
-- Claude Opus 5.5: chart tick spacing (`6d716f0`) and the 1.4 and 1.5
-  version bumps.
+- Claude Opus 5.5: chart tick spacing (`6d716f0`) and the 1.4, 1.5
+  and 1.6 version bumps.
 
 ## Where the attributions come from
 

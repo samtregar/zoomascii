@@ -48,7 +48,7 @@ MILESTONES = [
     ('36849b5', '2026-09-05', 'openai', 'GPT-6 Astra', 'GPT-6 Astra', '1.3'),
     ('d94dc1b', '2026-09-22', 'anthropic', 'Opus 5.5', 'Claude Opus 5.5', '1.4'),
     ('cc3ec95', '2026-10-14', 'google', 'Gemini 4', 'Gemini 4', '1.5'),
-    ('0119bd0', '2026-11-09', 'anthropic', 'Fable 5.2', 'Claude Fable 5.2', None),
+    ('0119bd0', '2026-11-09', 'anthropic', 'Fable 5.2', 'Claude Fable 5.2', '1.6'),
 ]
 
 # Colour follows the maker, in this fixed order, whichever makers a

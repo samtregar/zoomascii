@@ -41,6 +41,7 @@
 <text x="629.7" y="400" font-size="11" text-anchor="middle" fill="#898781">Oct 14, 2026</text>
 <text x="629.7" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.5</text>
 <text x="712.0" y="400" font-size="11" text-anchor="middle" fill="#898781">Nov 9, 2026</text>
+<text x="712.0" y="415" font-size="11" text-anchor="middle" fill="#898781">v1.6</text>
 <text x="394.0" y="440" font-size="11" text-anchor="middle" fill="#898781">Commits that made b2a_qp faster, in order (not to time scale)</text>
 <line x1="136.0" y1="367.3" x2="218.3" y2="366.6" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/>
 <line x1="218.3" y1="366.6" x2="300.6" y2="360.0" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/>
